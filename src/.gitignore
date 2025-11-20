@@ -1,2 +1,10 @@
-/.output
-/bootstrap
+.vscode
+package.json
+*.o
+*.skel.json
+*.skel.yaml
+package.yaml
+ecli
+ecc
+.output
+struct_ops
