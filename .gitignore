@@ -1,2 +1,11 @@
 .direnv
 /build
+src/.output/
+
+# BPF binary programs
+src/struct_ops
+src/prefetch_always_max
+src/prefetch_none
+src/prefetch_adaptive_simple
+src/prefetch_adaptive_ptr
+src/cleanup_struct_ops_tool
