@@ -10,24 +10,8 @@ char _license[] SEC("license") = "GPL";
 extern int bpf_uvm_strstr(const char *str, u32 str__sz, const char *substr, u32 substr__sz) __ksym;
 
 /* Implement the struct_ops callbacks */
-SEC("struct_ops/test_1")
-int BPF_PROG(bpf_testmod_test_1)
-{
-
-
-	return 42;
-}
-
-SEC("struct_ops/test_2")
-int BPF_PROG(bpf_testmod_test_2, int a, int b)
-{
-	int result = a + b;
-	bpf_printk("BPF test_2 called: %d + %d = %d\n", a, b, result);
-	return result;
-}
-
-SEC("struct_ops/test_3")
-int BPF_PROG(bpf_testmod_test_3, const char *buf, int len)
+SEC("struct_ops/uvm_bpf_test_trigger_kfunc")
+int BPF_PROG(uvm_bpf_test_trigger_kfunc, const char *buf, int len)
 {
 	char read_buf[64] = {0};
 	int read_len = len < sizeof(read_buf) ? len : sizeof(read_buf) - 1;
@@ -35,7 +19,7 @@ int BPF_PROG(bpf_testmod_test_3, const char *buf, int len)
 	char substr[] = "GPU";
 	int result;
 
-	bpf_printk("BPF test_3 called with buffer length %d\n", len);
+	bpf_printk("BPF uvm_bpf_test_trigger_kfunc called with buffer length %d\n", len);
 
 	/* Test the kfunc */
 	result = bpf_uvm_strstr(str, sizeof(str) - 1, substr, sizeof(substr) - 1);
@@ -63,8 +47,6 @@ int BPF_PROG(bpf_testmod_test_3, const char *buf, int len)
 
 /* Define the struct_ops map */
 SEC(".struct_ops")
-struct bpf_testmod_ops testmod_ops = {
-	.test_1 = (void *)bpf_testmod_test_1,
-	.test_2 = (void *)bpf_testmod_test_2,
-	.test_3 = (void *)bpf_testmod_test_3,
+struct uvm_gpu_ext uvm_ops = {
+	.uvm_bpf_test_trigger_kfunc = (void *)uvm_bpf_test_trigger_kfunc,
 };

@@ -52,7 +52,7 @@ static int cleanup_old_struct_ops(void) {
 
         /* Check if this is our struct_ops map */
         if (info.type == BPF_MAP_TYPE_STRUCT_OPS &&
-            strcmp(info.name, "testmod_ops") == 0) {
+            strcmp(info.name, "uvm_ops") == 0) {
             printf("Found old struct_ops map (ID: %u, name: %s)\n",
                    info.id, info.name);
             printf("Attempting to clean up...\n");
@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
     }
 
     /* Register struct_ops */
-    link = bpf_map__attach_struct_ops(skel->maps.testmod_ops);
+    link = bpf_map__attach_struct_ops(skel->maps.uvm_ops);
     if (!link) {
         fprintf(stderr, "Failed to attach struct_ops\n");
         err = -1;
