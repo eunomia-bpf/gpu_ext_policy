@@ -7,7 +7,7 @@
 struct uvm_gpu_ext {
 	int (*uvm_bpf_test_trigger_kfunc)(const char *, int);
 	int (*uvm_prefetch_before_compute)(uvm_page_index_t, uvm_perf_prefetch_bitmap_tree_t *, uvm_va_block_region_t *, uvm_va_block_region_t *);
-	int (*uvm_prefetch_on_tree_iter)(uvm_page_index_t, uvm_perf_prefetch_bitmap_tree_t *, uvm_va_block_region_t *, uvm_va_block_region_t *, unsigned int, uvm_va_block_region_t *);
+	int (*uvm_prefetch_on_tree_iter)(uvm_perf_prefetch_bitmap_tree_t *, uvm_va_block_region_t *, uvm_va_block_region_t *, unsigned int, uvm_va_block_region_t *);
 };
 
 /* BPF kfuncs */

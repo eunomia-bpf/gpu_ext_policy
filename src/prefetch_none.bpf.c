@@ -30,12 +30,11 @@ int BPF_PROG(uvm_prefetch_before_compute,
 /* This hook is called on each tree iteration - not used in none policy */
 SEC("struct_ops/uvm_prefetch_on_tree_iter")
 int BPF_PROG(uvm_prefetch_on_tree_iter,
-             uvm_page_index_t page_index,
              uvm_perf_prefetch_bitmap_tree_t *bitmap_tree,
              uvm_va_block_region_t *max_prefetch_region,
              uvm_va_block_region_t *current_region,
              unsigned int counter,
-             unsigned int subregion_pages)
+             uvm_va_block_region_t *prefetch_region)
 {
     /* Not used in none policy */
     return 0; /* UVM_BPF_ACTION_DEFAULT */
