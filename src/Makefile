@@ -21,7 +21,9 @@ INCLUDES := -I$(OUTPUT) -I../libbpf/include/uapi -I$(dir $(VMLINUX))
 CFLAGS := -g -Wall
 ALL_LDFLAGS := $(LDFLAGS) $(EXTRA_LDFLAGS)
 
-APPS = struct_ops # minimal minimal_legacy uprobe kprobe fentry usdt sockfilter tc ksyscall
+BPF_APPS = struct_ops always_max # BPF apps that need skeletons
+TOOL_APPS = cleanup_struct_ops_tool # Pure userspace tools
+APPS = $(BPF_APPS) $(TOOL_APPS) # minimal minimal_legacy uprobe kprobe fentry usdt sockfilter tc ksyscall
 
 CARGO ?= $(shell which cargo)
 ifeq ($(strip $(CARGO)),)
@@ -115,8 +117,13 @@ $(OUTPUT)/%.skel.h: $(OUTPUT)/%.bpf.o | $(OUTPUT) $(BPFTOOL)
 	$(call msg,GEN-SKEL,$@)
 	$(Q)$(BPFTOOL) gen skeleton $< > $@
 
-# Build user-space code
-$(patsubst %,$(OUTPUT)/%.o,$(APPS)): %.o: %.skel.h
+# Build user-space code - BPF apps need skeletons
+$(patsubst %,$(OUTPUT)/%.o,$(BPF_APPS)): %.o: %.skel.h
+
+# Tool apps don't need skeletons
+$(patsubst %,$(OUTPUT)/%.o,$(TOOL_APPS)): $(OUTPUT)/%.o: %.c cleanup_struct_ops.h | $(OUTPUT)
+	$(call msg,CC,$@)
+	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(filter %.c,$^) -o $@
 
 $(OUTPUT)/%.o: %.c $(wildcard %.h) | $(OUTPUT)
 	$(call msg,CC,$@)

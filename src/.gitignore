@@ -8,3 +8,5 @@ ecli
 ecc
 .output
 struct_ops
+always_max
+cleanup_struct_ops_tool
