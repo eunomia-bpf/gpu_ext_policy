@@ -207,7 +207,7 @@ int main(int argc, char **argv)
         }
     }
 
-    print_stats(skel);
+    // print_stats(skel);  // Disabled to keep CSV output clean
 
 cleanup:
     ring_buffer__free(rb);

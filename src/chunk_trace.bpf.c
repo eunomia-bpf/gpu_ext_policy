@@ -101,9 +101,9 @@ int BPF_KPROBE(trace_activate, void *pmm, void *chunk, void *list)
     return 0;
 }
 
-/* Hook 2: Populate (chunk gets first resident page) */
-SEC("kprobe/uvm_bpf_call_pmm_chunk_populate")
-int BPF_KPROBE(trace_populate, void *pmm, void *chunk, void *list)
+/* Hook 2: Used (chunk gets accessed/used) */
+SEC("kprobe/uvm_bpf_call_pmm_chunk_used")
+int BPF_KPROBE(trace_used, void *pmm, void *chunk, void *list)
 {
     inc_stat(STAT_POPULATE);
     submit_event(HOOK_POPULATE, (u64)chunk, (u64)list);
