@@ -7,7 +7,7 @@
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
 
-#include "lru_fifo.skel.h"
+#include "eviction_lfu.skel.h"
 #include "cleanup_struct_ops.h"
 
 static volatile bool exiting = false;
@@ -17,7 +17,7 @@ void handle_signal(int sig) {
 }
 
 int main(int argc, char **argv) {
-    struct lru_fifo_bpf *skel;
+    struct eviction_lfu_bpf *skel;
     struct bpf_link *link;
     int err;
 
@@ -28,35 +28,35 @@ int main(int argc, char **argv) {
     cleanup_old_struct_ops();
 
     /* Open BPF application */
-    skel = lru_fifo_bpf__open();
+    skel = eviction_lfu_bpf__open();
     if (!skel) {
         fprintf(stderr, "Failed to open BPF skeleton\n");
         return 1;
     }
 
     /* Load BPF programs */
-    err = lru_fifo_bpf__load(skel);
+    err = eviction_lfu_bpf__load(skel);
     if (err) {
         fprintf(stderr, "Failed to load BPF skeleton: %d\n", err);
         goto cleanup;
     }
 
     /* Register struct_ops */
-    link = bpf_map__attach_struct_ops(skel->maps.uvm_ops_fifo);
+    link = bpf_map__attach_struct_ops(skel->maps.uvm_ops_lfu_clean);
     if (!link) {
         err = -errno;
         fprintf(stderr, "Failed to attach struct_ops: %s (%d)\n", strerror(-err), err);
         goto cleanup;
     }
 
-    printf("Successfully loaded and attached BPF FIFO eviction policy!\n");
-    printf("The FIFO (First-In-First-Out) eviction policy is now active.\n");
-    printf("Chunks will be evicted in the order they were populated.\n");
+    printf("Successfully loaded and attached BPF LFU eviction policy!\n");
+    printf("The LFU (Least Frequently Used) eviction policy is now active.\n");
+    printf("Chunks will be evicted based on access frequency.\n");
     printf("\nPolicy behavior:\n");
-    printf("  - Newly populated chunks: moved to head (evicted first)\n");
-    printf("  - Eviction order: oldest populated chunk first\n");
+    printf("  - Low frequency chunks (< 3 accesses): near HEAD (evicted first)\n");
+    printf("  - High frequency chunks (>= 10 accesses): moved to TAIL (protected)\n");
     printf("\nMonitor dmesg for BPF debug output:\n");
-    printf("  sudo dmesg -w | grep 'BPF FIFO'\n");
+    printf("  sudo dmesg -w | grep 'BPF LFU'\n");
     printf("\nPress Ctrl-C to exit and detach the policy...\n");
 
     /* Wait for signal */
@@ -68,6 +68,6 @@ int main(int argc, char **argv) {
     bpf_link__destroy(link);
 
 cleanup:
-    lru_fifo_bpf__destroy(skel);
+    eviction_lfu_bpf__destroy(skel);
     return err < 0 ? -err : 0;
 }

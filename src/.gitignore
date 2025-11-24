@@ -10,6 +10,8 @@ ecc
 struct_ops
 prefetch_always_max
 prefetch_none
+prefetch_adaptive_simple
 cleanup_struct_ops_tool
-lru_fifo
+eviction_fifo
+eviction_lfu
 chunk_trace
