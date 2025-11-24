@@ -1,720 +1,780 @@
-# BPF struct_ops Example with Custom Kernel Module
+# GPU Memory Management BPF Policies
 
-This example demonstrates BPF struct_ops functionality using a custom kernel module that defines struct_ops operations triggered via a proc file write.
+这个目录包含用于NVIDIA UVM (Unified Virtual Memory) 的BPF struct_ops策略实现，用于优化GPU内存管理。
 
-## Overview
 
-struct_ops allows BPF programs to implement kernel subsystem operations dynamically. This example includes:
+timeout 30 sudo /home/yunwei37/workspace/gpu/co-processor-demo/gpu_ext_policy/src/chunk_trace > /tmp/test_trace.csv
 
-1. **Kernel Module** (`module/hello.c`) - Defines `bpf_testmod_ops` struct_ops with three callbacks
-2. **BPF Program** (`struct_ops.bpf.c`) - Implements the struct_ops callbacks in BPF
-3. **User-space Loader** (`struct_ops.c`) - Loads the BPF program and triggers callbacks via `/proc/bpf_testmod_trigger`
 
-## Building and Running
 
-### 1. Build the kernel module:
+## 📋 目录
+
+- [系统架构](#系统架构)
+- [Chunk状态转换](#chunk状态转换)
+- [可用的Hook点](#可用的hook点)
+- [Eviction策略](#eviction策略)
+- [Prefetch策略](#prefetch策略)
+- [如何使用](#如何使用)
+
+---
+
+## 系统架构
+
+### 核心概念
+
+#### 1. **物理Chunk (Physical Chunk)**
+- GPU内存管理的基本单位（通常64KB）
+- `chunk_addr` - 物理内存块地址
+- **Eviction policy操作的对象**
+
+#### 2. **VA Block (Virtual Address Block)**
+- 代表虚拟地址范围 `[va_start, va_end)`
+- 一个VA block通常映射到多个物理chunks
+- `va_block_page_index` - chunk在VA block内的页索引
+
+#### 3. **映射关系**
+```
+Virtual Address Space              Physical Memory (GPU VRAM)
+┌─────────────────────┐           ┌──────────────┐
+│   VA Block 1        │           │  Chunk A     │
+│   [va_start, va_end]│────┬─────→│  (64KB)      │
+│   2MB                │    │      │  [ACTIVE]    │
+└─────────────────────┘    │      └──────────────┘
+                           │      ┌──────────────┐
+┌─────────────────────┐    └─────→│  Chunk B     │
+│   VA Block 2        │           │  (64KB)      │
+│   2MB                │──────────→│  [ACTIVE]    │
+└─────────────────────┘           └──────────────┘
+                                  ┌──────────────┐
+     (unmapped)                   │  Chunk C     │
+                                  │  (64KB)      │
+                                  │  [UNUSED]    │
+                                  └──────────────┘
+```
+
+**关键特性**（基于实际trace数据）：
+- 平均每个VA block使用 **10.8个物理chunks**
+- 平均每个chunk在生命周期内被 **16.5个不同VA blocks重用**
+- **⚠️ 注意**：这不是"同时共享"，而是**时间上的重用**
+  - 同一时刻，一个chunk只映射到**一个VA block**
+  - Chunk被evict后，会被分配给新的VA block
+  - "16.5个VA/chunk"是整个trace期间的**累积重用次数**
+
+---
+
+## Chunk状态转换
+
+### 状态机图
+
+```
+                    ┌──────────────────────────────┐
+                    │                              │
+                    │     Unused Pool             │
+                    │  (Free chunks available)    │
+                    │                              │
+                    └──────────┬───────────────────┘
+                               │
+                               │ assign (from kernel)
+                               ↓
+                    ┌──────────────────────────────┐
+                    │                              │
+                    │        Active               │
+              ┌────→│  (Mapped to VA block)       │────┐
+              │     │                              │    │
+              │     └──────────────────────────────┘    │
+              │                                          │
+              │ reuse                            evict   │
+              │ (reassign)                       ↓       │
+              │                         ┌────────────────┤
+              │                         │                │
+              │                         │  In-Eviction  │
+              │                         │                │
+              │                         └────────┬───────┘
+              │                                  │
+              └──────────────────────────────────┘
+                         回到 Unused Pool
+```
+
+### 详细说明
+
+#### 状态1: **Unused（未使用）**
+- Chunk在free pool中
+- 没有映射到任何VA block
+- 等待被分配
+
+#### 状态2: **Active（活跃）**
+- Chunk被分配给某个VA block
+- 处于"evictable"状态，可以被访问或evict
+- **这是BPF policy关注的主要状态**
+
+子状态：
+- **Activated** - 刚被分配，加入evictable list
+  - Hook: `uvm_pmm_chunk_activate`
+- **Being Used** - 正在被访问
+  - Hook: `uvm_pmm_chunk_used`
+
+#### 状态3: **In-Eviction（驱逐中）**
+- 正在从当前VA block解除映射
+- 即将回到unused pool
+- Hook: `uvm_pmm_eviction_prepare`
+
+### 完整生命周期流程
+
+```
+1. Chunk从unused pool分配给VA Block X
+   ↓
+2. [uvm_pmm_chunk_activate]
+   Chunk激活，加入evictable list（可被evict的候选）
+   ↓
+3. [uvm_pmm_chunk_used - 可能多次]
+   VA Block X访问chunk，policy更新chunk的LRU位置
+   ↓
+4. [uvm_pmm_eviction_prepare]
+   内存压力触发，需要回收内存
+   Policy选择victim chunks（最不值得保留的）
+   ↓
+5. Chunk从VA Block X解除映射
+   Chunk → unused pool
+   ↓
+6. （稍后）Chunk被重新分配给VA Block Y
+   回到步骤1
+```
+
+### 关键点
+
+1. **Eviction ≠ 直接重新分配**
+   ```
+   错误理解：
+     Chunk A: VA Block X → [evict] → VA Block Y
+
+   正确理解：
+     Chunk A: VA Block X → [evict] → unused pool → [assign] → VA Block Y
+                                       ↑
+                                    中间状态
+   ```
+
+2. **为什么需要unused pool？**
+   - **解耦evict和assign**：Eviction policy只负责"谁该被踢出去"
+   - **批量操作效率**：可以一次evict多个chunks
+   - **内存压力缓冲**：Pool大小影响系统性能
+
+3. **Policy的职责边界**
+   - ✅ **Policy负责**：选择哪些chunks被evict（victim selection）
+   - ❌ **Policy不负责**：Chunk分配给哪个VA block（由内核决定）
+
+---
+
+## ⚠️ 理解Trace数据的常见误区
+
+### 误区1: "16.5个VA blocks/chunk = 同时共享"
+
+**错误理解**:
+```
+           VA Block 1 ─┐
+           VA Block 2 ─┤
+           VA Block 3 ─┼─→ Chunk A (同时被17个VA blocks共享)
+               ...     ─┤
+           VA Block 17─┘
+```
+
+**正确理解**:
+```
+时刻 T1: VA Block 1  → Chunk A
+时刻 T2: VA Block 1 evicted, Chunk A → unused pool
+时刻 T3: VA Block 5  → Chunk A (被重新分配)
+时刻 T4: VA Block 5 evicted, Chunk A → unused pool
+时刻 T5: VA Block 12 → Chunk A (再次重新分配)
+...
+总计: Chunk A 被 17个不同的VA blocks重用过
+
+结论：16.5是"累积重用次数"，不是"同时引用数"
+```
+
+### 误区2: "所有chunks都共享 = 需要保护高引用chunks"
+
+**为什么这个逻辑不成立**:
+
+对于**Sequential streaming workload** (如seq_stream):
+- 所有chunks的访问频率都是1次
+- 没有"热点"chunks
+- 高重用次数只说明chunk被**循环利用**得好
+- 保护高重用chunk没有意义，因为：
+  - 被evict的chunk已经不会再被当前VA访问
+  - 重用次数高 = 在内存中呆的时间久，**应该被evict**
+
+对于**Random with hotspots** workload:
+- 少数chunks被频繁访问（真正的热点）
+- 这时候保护高频访问的chunks才有意义
+- 但这要看**访问频率**，不是**重用次数**
+
+### 如何正确分析Trace数据
+
+#### 1. 看访问模式，不是统计数字
+
+```python
+# 错误：只看平均值
+avg_reuse = total_va_accesses / unique_chunks  # 16.5
+
+# 正确：看时间序列
+for chunk in chunks:
+    access_times = get_access_times(chunk)
+    if len(access_times) == 1:
+        print("One-time use - streaming pattern")
+    elif has_temporal_locality(access_times):
+        print("Reused - keep in cache")
+```
+
+#### 2. 区分"重用"和"共享"
+
+- **重用** (Reuse): 时间维度，同一chunk被不同VA使用
+  - `chunk → VA1 → evict → VA2 → evict → VA3`
+  - 例子：Sequential streaming，chunk循环利用
+
+- **共享** (Sharing): 空间维度，多个VA同时引用同一chunk
+  - `chunk ← VA1, VA2, VA3同时引用`
+  - 例子：Shared memory, read-only data
+
+#### 3. 从图表看本质
+
+**Sequential pattern的特征**:
+```
+VA访问热力图：
+时间 →
+  0ms    5ms    10ms
+┌─────┬─────┬─────┐
+│█████│     │     │ ← VA Range 1 (只在开始被访问)
+├─────┼─────┼─────┤
+│     │█████│     │ ← VA Range 2 (中间被访问)
+├─────┼─────┼─────┤
+│     │     │█████│ ← VA Range 3 (最后被访问)
+└─────┴─────┴─────┘
+
+特点：垂直条纹，无重复
+```
+
+**Random with hotspots的特征**:
+```
+VA访问热力图：
+时间 →
+  0ms    5ms    10ms
+┌─────┬─────┬─────┐
+│█████│█████│█████│ ← VA Range 1 (一直被访问 - 热点!)
+├─────┼─────┼─────┤
+│█    │     │  █  │ ← VA Range 2 (偶尔访问)
+├─────┼─────┼─────┤
+│  █  │█    │█    │ ← VA Range 3 (偶尔访问)
+└─────┴─────┴─────┘
+
+特点：某些VA一直热，有明显的热点行
+```
+
+---
+
+## 可用的Hook点
+
+NVIDIA UVM提供6个BPF struct_ops hook点，分为两类：
+
+### 类别A: Eviction相关（内存回收）
+
+#### 1. `uvm_pmm_chunk_activate`
+**触发时机**: Chunk被分配给VA block后，进入evictable状态
+
+**参数**:
+```c
+int uvm_pmm_chunk_activate(
+    uvm_pmm_gpu_t *pmm,              // GPU内存管理器
+    uvm_gpu_chunk_t *chunk,          // 被激活的chunk
+    struct list_head *list           // Evictable list
+);
+```
+
+**Policy可以做什么**:
+- 初始化chunk的元数据（访问时间、频率等）
+- 决定chunk在eviction list中的初始位置
+- 返回0使用默认行为，返回1 bypass默认
+
+**示例**: LRU默认行为将chunk加到list尾部
+
+#### 2. `uvm_pmm_chunk_used`
+**触发时机**: Chunk被访问/使用（最关键的hook）
+
+**参数**:
+```c
+int uvm_pmm_chunk_used(
+    uvm_pmm_gpu_t *pmm,
+    uvm_gpu_chunk_t *chunk,          // 被访问的chunk
+    struct list_head *list
+);
+```
+
+**Policy可以做什么**:
+- 更新访问时间戳（LRU）
+- 增加访问计数器（LFU）
+- **调整chunk在list中的位置**（决定eviction优先级）
+- 考虑chunk的共享度（被多少VA blocks引用）
+
+**重要性**: ⭐⭐⭐⭐⭐ 这是决定policy效果的关键hook
+
+#### 3. `uvm_pmm_eviction_prepare`
+**触发时机**: 内存压力触发，需要evict内存
+
+**参数**:
+```c
+int uvm_pmm_eviction_prepare(
+    uvm_pmm_gpu_t *pmm,
+    struct list_head *va_block_used,   // Used VA blocks list
+    struct list_head *va_block_unused  // Unused VA blocks list
+);
+```
+
+**Policy可以做什么**:
+- 最后调整列表顺序（如果需要）
+- 检测内存压力程度
+- 动态切换策略（aggressive vs conservative）
+
+**注意**: LRU通常不需要额外操作，因为list已经按访问顺序排列
+
+---
+
+### 类别B: Prefetch相关（预取优化）
+
+Prefetch机制用于在实际访问前将数据从CPU迁移到GPU，减少page fault延迟。
+
+#### 4. `uvm_prefetch_before_compute`
+**触发时机**: 在GPU kernel开始计算前，决定要prefetch哪些页面
+
+**参数**:
+```c
+int uvm_prefetch_before_compute(
+    uvm_page_index_t page_index,                    // 触发prefetch的页面索引
+    uvm_perf_prefetch_bitmap_tree_t *bitmap_tree,   // Prefetch候选页面树
+    uvm_va_block_region_t *max_prefetch_region,     // 最大可prefetch区域
+    uvm_va_block_region_t *result_region            // [OUT] 实际prefetch区域
+);
+```
+
+**返回值**:
+- `0` (DEFAULT) - 使用内核默认策略
+- `1` (BYPASS) - 使用`result_region`，跳过默认逻辑
+- `2` (ENTER_LOOP) - 进入迭代模式，逐个检查`bitmap_tree`
+
+**策略示例**:
+- **Always Max**: 直接prefetch整个`max_prefetch_region`
+- **None**: 设置`result_region`为空，禁用prefetch
+- **Adaptive**: 返回ENTER_LOOP，让`uvm_prefetch_on_tree_iter`决定
+
+#### 5. `uvm_prefetch_on_tree_iter`
+**触发时机**: 当`uvm_prefetch_before_compute`返回ENTER_LOOP时，对每个候选区域调用
+
+**参数**:
+```c
+int uvm_prefetch_on_tree_iter(
+    uvm_perf_prefetch_bitmap_tree_t *bitmap_tree,
+    uvm_va_block_region_t *max_prefetch_region,
+    uvm_va_block_region_t *current_region,    // 当前检查的区域
+    unsigned int counter,                     // 区域内的访问计数
+    uvm_va_block_region_t *prefetch_region    // [OUT] 如果选择此区域
+);
+```
+
+**返回值**:
+- `0` - 不选择此区域
+- `1` - 选择此区域进行prefetch（设置`prefetch_region`）
+
+**自适应阈值示例**:
+```c
+// 只prefetch "热"区域（访问率 > threshold%）
+if (counter * 100 > subregion_pages * threshold) {
+    bpf_uvm_set_va_block_region(prefetch_region, first, outer);
+    return 1;  // 选择这个区域
+}
+return 0;  // 跳过这个区域
+```
+
+#### 6. `uvm_bpf_test_trigger_kfunc`
+**用途**: 测试/调试用，通过proc文件触发
+
+---
+
+## Eviction策略
+
+### 已实现的策略
+
+#### 1. **LRU (Least Recently Used) - 默认**
+**文件**: 内核默认实现
+
+**工作原理**:
+- `chunk_activate`: 将chunk加到list尾部
+- `chunk_used`: 将chunk移到list头部（最近使用）
+- `eviction_prepare`: List尾部的chunks优先被evict
+
+**适用场景**:
+- ✅ 有时间局部性（temporal locality）
+- ✅ 最近访问的数据很可能再次被访问
+
+#### 2. **FIFO (First In First Out)**
+**文件**: `lru_fifo.bpf.c`
+
+**工作原理**:
+```c
+SEC("struct_ops/uvm_pmm_chunk_used")
+int BPF_PROG(uvm_pmm_chunk_used, ...) {
+    // 不移动chunk，保持插入顺序
+    return 1; // BYPASS
+}
+```
+
+**适用场景**:
+- ✅ **Sequential scan（顺序扫描）** - 如`seq_stream` kernel
+- ✅ **数据只使用一次（streaming workload）**
+- ✅ Working set > GPU memory（频繁eviction场景）
+- ❌ **不适合有重复访问的workload**（会evict掉可能再次访问的数据）
+
+**为什么对seq_stream最优**:
+1. **匹配访问模式**: Sequential = 一次性访问，最早访问的最先不需要
+2. **零维护开销**: `chunk_used`时直接bypass，不移动list
+3. **正确的victim选择**: FIFO自然选择最不需要的chunks
+4. **性能提升**: 相比LRU减少10-20%的list操作开销
+
+#### 3. **LFU (Least Frequently Used)** （适合特定workload）
+**状态**: 待实现
+
+**核心思想**: 基于访问频率而不是访问时间来决定eviction
+
+**伪代码**:
+```c
+// BPF map记录访问频率
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, u64);      // chunk address
+    __type(value, u32);    // access count
+} chunk_freq SEC(".maps");
+
+SEC("struct_ops/uvm_pmm_chunk_used")
+int BPF_PROG(uvm_pmm_chunk_used, ...) {
+    u64 key = (u64)chunk;
+    u32 *count = bpf_map_lookup_elem(&chunk_freq, &key);
+
+    if (count) {
+        (*count)++;
+
+        // 根据频率调整位置
+        if (*count > 100) {
+            // 高频：保护
+            bpf_list_move_head(&chunk->list, list);
+        } else if (*count > 10) {
+            // 中频：正常LRU
+            bpf_list_move(&chunk->list, list, NORMAL_POSITION);
+        }
+        // 低频：不移动，容易被evict
+    } else {
+        u32 initial_count = 1;
+        bpf_map_update_elem(&chunk_freq, &key, &initial_count, BPF_ANY);
+    }
+
+    return 0;
+}
+```
+
+**适用场景**:
+- ✅ 有明显的"热数据"（少数数据被频繁访问）
+- ✅ Random access with hotspots
+- ❌ **不适合sequential streaming**（所有数据访问频率相同）
+
+**为什么对seq_stream无效**:
+- Sequential access意味着所有chunk访问频率≈1
+- 没有"热点"可以保护
+- LFU退化为FIFO
+
+---
+
+## Prefetch策略
+
+### 已实现的策略
+
+#### 1. **Always Max** - 激进预取
+**文件**: `prefetch_always_max.bpf.c`
+
+**工作原理**:
+```c
+SEC("struct_ops/uvm_prefetch_before_compute")
+int BPF_PROG(uvm_prefetch_before_compute, ...) {
+    // 直接prefetch整个max_prefetch_region
+    bpf_uvm_set_va_block_region(result_region, max_first, max_outer);
+    return 1; // BYPASS
+}
+```
+
+**优点**: 最大化GPU端数据可用性，减少page faults
+**缺点**: 可能预取不需要的数据，浪费PCIe带宽和GPU内存
+
+**适用场景**:
+- PCIe带宽充足
+- GPU内存充足
+- Kernel访问模式不确定
+
+#### 2. **None** - 禁用预取
+**文件**: `prefetch_none.bpf.c`
+
+**工作原理**:
+```c
+SEC("struct_ops/uvm_prefetch_before_compute")
+int BPF_PROG(uvm_prefetch_before_compute, ...) {
+    // 设置为空region
+    bpf_uvm_set_va_block_region(result_region, 0, 0);
+    return 1; // BYPASS
+}
+```
+
+**适用场景**:
+- 需要按需迁移（demand paging）
+- PCIe带宽有限
+- 访问模式稀疏（sparse access）
+
+#### 3. **Adaptive Simple** - 基于阈值的自适应
+**文件**: `prefetch_adaptive_simple.bpf.c`
+
+**工作原理**:
+1. Userspace监控PCIe吞吐量，更新`threshold_map`
+2. BPF根据阈值决定是否prefetch某个区域
+
+```c
+SEC("struct_ops/uvm_prefetch_on_tree_iter")
+int BPF_PROG(uvm_prefetch_on_tree_iter, ...) {
+    unsigned int threshold = get_threshold(); // 从map读取
+
+    // 计算访问密度
+    unsigned int subregion_pages = outer - first;
+
+    // 只prefetch热区域: counter/pages > threshold%
+    if (counter * 100 > subregion_pages * threshold) {
+        bpf_uvm_set_va_block_region(prefetch_region, first, outer);
+        return 1; // 选择此区域
+    }
+
+    return 0; // 跳过此区域
+}
+```
+
+**优点**:
+- 根据系统负载动态调整
+- 平衡prefetch收益和带宽成本
+
+**阈值含义**:
+- `threshold = 50%`: 如果区域内50%页面被访问，才prefetch
+- Higher threshold → 更保守（less prefetch）
+- Lower threshold → 更激进（more prefetch）
+
+**Userspace组件** (需要实现):
+```c
+// 伪代码：监控PCIe并更新阈值
+while (1) {
+    float pcie_usage = get_pcie_throughput();
+
+    if (pcie_usage > 0.8) {
+        threshold = 70;  // 高负载：更保守
+    } else if (pcie_usage > 0.5) {
+        threshold = 50;  // 中等负载：平衡
+    } else {
+        threshold = 30;  // 低负载：更激进
+    }
+
+    update_threshold_map(threshold);
+    sleep(1);
+}
+```
+
+### Prefetch vs Eviction的关系
+
+```
+                    Prefetch                     Eviction
+                       ↓                            ↑
+         CPU Memory ←───→ GPU Memory (VRAM) ←─────→ Unused Pool
+                    (主动迁移)                (被动回收)
+
+Prefetch目标: 提前将CPU内存迁移到GPU，减少未来的page fault
+Eviction目标: 在GPU内存不足时，回收最不重要的chunks
+```
+
+**协同优化**:
+1. 好的**prefetch策略**减少page faults，降低eviction压力
+2. 好的**eviction策略**保留重要数据，减少re-fetch需求
+3. 两者配合可以显著提升整体性能
+
+---
+
+## 如何使用
+
+### 1. 编译BPF程序
+
 ```bash
-cd module
+cd /home/yunwei37/workspace/gpu/co-processor-demo/gpu_ext_policy/src
 make
-cd ..
 ```
 
-### 2. Load the kernel module:
+生成的文件:
+- `lru_fifo.bpf.o` - FIFO eviction policy
+- `prefetch_always_max.bpf.o` - Always max prefetch
+- `prefetch_none.bpf.o` - Disable prefetch
+- `prefetch_adaptive_simple.bpf.o` - Adaptive prefetch
+
+### 2. 加载Policy
+
 ```bash
-sudo insmod module/hello.ko
+# 加载FIFO eviction policy
+sudo bpftool struct_ops register obj lru_fifo.bpf.o
+
+# 加载prefetch policy
+sudo bpftool struct_ops register obj prefetch_always_max.bpf.o
 ```
 
-### 3. Build the BPF program:
+### 3. 验证加载
+
 ```bash
-make
+# 查看已加载的struct_ops
+sudo bpftool struct_ops show
+
+# 查看内核日志
+sudo dmesg | tail -20
 ```
 
-### 4. Run the example:
+### 4. 卸载Policy
+
 ```bash
-sudo ./struct_ops
+# 找到struct_ops ID
+sudo bpftool struct_ops show
+
+# 卸载
+sudo bpftool struct_ops unregister id <ID>
 ```
 
-### 5. Check kernel logs:
+### 5. 性能测试
+
 ```bash
-sudo dmesg -w
+# Baseline: 使用默认内核策略
+time ./your_workload
+
+# Test: 加载自定义policy
+sudo bpftool struct_ops register obj lru_fifo.bpf.o
+time ./your_workload
+
+# 对比page faults
+nvidia-smi dmon -s u
 ```
 
-You should see output like:
-```
-bpf_testmod loaded with struct_ops support
-bpf_testmod_ops registered
-Calling struct_ops callbacks:
-BPF test_1 called!
-test_1() returned: 42
-BPF test_2 called: 10 + 20 = 30
-test_2(10, 20) returned: 30
-BPF test_3 called with buffer length 21
-First char: H
-test_3() called with buffer
-```
+### 6. 调试
 
-### 6. Clean up:
+**查看BPF日志**:
 ```bash
-# First, stop the BPF program gracefully (Ctrl-C if running in foreground)
-# This ensures the BPF link is properly destroyed
-
-# Then unload the kernel module
-sudo rmmod hello
-
-# If you get "Module hello is in use", there may still be a BPF struct_ops attached
-# This can happen if the userspace process was killed (-9) instead of stopped gracefully
-# Solutions:
-#   1. Wait ~30 seconds for kernel to garbage collect the BPF link
-#   2. Force unload: sudo rmmod -f hello (may be unstable)
-#   3. Reboot the system
-
-# Clean build artifacts
-make clean
+sudo cat /sys/kernel/debug/tracing/trace_pipe
 ```
 
-**Note on Module Unloading:**
-The kernel module maintains a reference count while BPF struct_ops programs are attached. When you stop the userspace loader program gracefully (Ctrl-C), it calls `bpf_link__destroy()` which properly detaches the struct_ops and decrements the module reference count. If the process is killed abruptly (kill -9), the kernel should eventually garbage collect the BPF link, but this may take some time.
+**Trace chunk生命周期**:
+```bash
+# 运行trace工具
+cd ../scripts
+sudo ./chunk_trace -d 10 -o /tmp/trace.csv
 
-## How It Works
+# 分析
+./analyze_chunk_trace.py /tmp/trace.csv
+./visualize_eviction.py /tmp/trace.csv -o /tmp
+```
 
-1. The kernel module registers a custom struct_ops type `bpf_testmod_ops`
-2. It creates `/proc/bpf_testmod_trigger` - writing to this file triggers the callbacks
-3. The BPF program implements the three callbacks: `test_1`, `test_2`, and `test_3`
-4. The user-space program loads the BPF program and periodically writes to the proc file
-5. Each write triggers all registered callbacks, demonstrating BPF struct_ops in action
+---
+
+## 设计新Policy的步骤
+
+1. **收集数据**
+   ```bash
+   sudo ./chunk_trace -d 10 -o /tmp/workload_trace.csv
+   ```
+
+2. **分析访问模式**
+   ```bash
+   ./visualize_eviction.py /tmp/workload_trace.csv -o /tmp
+   # 查看生成的图表和统计
+   ```
+
+3. **选择策略类型**
+   - **Sequential streaming** (如seq_stream) → **FIFO** ⭐
+   - **Random with hotspots** → LFU (基于访问频率)
+   - **Temporal locality** (重复访问) → LRU (默认)
+   - **Mixed pattern** → Adaptive (动态切换)
+
+4. **实现BPF程序**
+   - 参考 `lru_fifo.bpf.c` 作为模板
+   - 实现关键hooks（至少`chunk_used`）
+   - 添加必要的BPF maps（统计、配置等）
+
+5. **测试验证**
+   ```bash
+   make
+   sudo bpftool struct_ops register obj my_policy.bpf.o
+   # 运行workload
+   # 对比性能指标
+   ```
+
+6. **迭代优化**
+   - 根据新的trace数据调整
+   - A/B测试不同参数
+   - 监控page faults和性能
+
+---
+
+## 参考资料
+
+- [Policy Design Guide](../docs/POLICY_DESIGN_GUIDE.md) - 详细的策略设计指南
+- [BPF List Operations](../../docs/lru/BPF_LIST_OPERATIONS_GUIDE.md) - BPF链表操作
+- [UVM Kernel Parameters](../../memory/UVM_KERNEL_PARAMETERS.md) - UVM内核参数
+
+---
 
 ## Troubleshooting
 
-### Common Issues
+### 问题1: Failed to attach struct_ops
 
-- If you get "Failed to attach struct_ops", make sure the kernel module is loaded
-- Check `dmesg` for any error messages from the kernel module or BPF verifier
-- Ensure your kernel has CONFIG_BPF_SYSCALL=y and supports struct_ops
+**原因**: 内核模块未加载或BTF信息不匹配
 
-## Detailed Troubleshooting Guide
-
-This section documents the complete process of resolving BTF and struct_ops issues encountered during development.
-
-### Issue 1: Missing BTF in Kernel Module
-
-**Problem:**
-```
-libbpf: failed to find BTF info for struct_ops/bpf_testmod_ops
-```
-
-**Root Cause:**
-The kernel module was not compiled with BTF (BPF Type Format) information, which is required for struct_ops to work. BTF provides type information that BPF programs need to interact with kernel structures.
-
-**Solution:**
-
-#### Step 1: Extract vmlinux with BTF
-The kernel build system needs the `vmlinux` ELF binary (not just headers) to generate BTF for modules.
-
+**解决**:
 ```bash
-# Extract vmlinux from compressed kernel image
-sudo /usr/src/linux-headers-$(uname -r)/scripts/extract-vmlinux \
-    /boot/vmlinuz-$(uname -r) > /tmp/vmlinux
+# 检查nvidia-uvm模块
+lsmod | grep nvidia_uvm
 
-# Copy to kernel build directory
-sudo cp /tmp/vmlinux /usr/src/linux-headers-$(uname -r)/vmlinux
-
-# Verify it's an ELF binary
-file /tmp/vmlinux
-# Output: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked
+# 重新加载模块
+sudo rmmod nvidia_uvm
+sudo modprobe nvidia_uvm
 ```
 
-#### Step 2: Upgrade pahole (if needed)
-The BTF generation requires `pahole` (from dwarves package) version 1.16+. Older versions don't support the `--btf_features` flag.
+### 问题2: BPF verifier错误
 
-Check your version:
+**原因**: BPF程序违反了verifier规则
+
+**解决**:
+- 检查数组边界访问
+- 确保所有指针都经过NULL检查
+- 使用`BPF_CORE_READ`读取内核结构
+
+### 问题3: Struct_ops已存在
+
+**原因**: 之前的instance未正确清理
+
+**解决**:
 ```bash
-pahole --version
+# 找到并杀死持有struct_ops的进程
+sudo bpftool map show | grep struct_ops
+sudo kill <PID>
+
+# 或强制卸载
+sudo bpftool struct_ops unregister id <ID>
 ```
-
-If version is < 1.25, compile from source:
-
-```bash
-# Install dependencies
-sudo apt-get install -y libelf-dev cmake zlib1g-dev
-
-# Downgrade elfutils packages to matching versions
-sudo apt-get install -y --allow-downgrades \
-    libelf1t64=0.190-1.1ubuntu0.1 \
-    libdw1t64=0.190-1.1ubuntu0.1 \
-    libdw-dev=0.190-1.1ubuntu0.1 \
-    libelf-dev=0.190-1.1ubuntu0.1
-
-# Clone and build pahole
-git clone https://git.kernel.org/pub/scm/devel/pahole/pahole.git /tmp/pahole
-cd /tmp/pahole
-mkdir build && cd build
-cmake -DCMAKE_INSTALL_PREFIX=/usr ..
-make -j$(nproc)
-sudo make install
-
-# Verify new version
-pahole --version  # Should show v1.30 or higher
-```
-
-#### Step 3: Rebuild the module with BTF
-The module Makefile already has BTF enabled with `-g -O2` flags. Simply rebuild:
-
-```bash
-cd module
-make clean
-make
-```
-
-Verify BTF was generated:
-```bash
-readelf -S hello.ko | grep BTF
-# Should show:
-#   [60] .BTF              PROGBITS         ...
-#   [61] .BTF.base         PROGBITS         ...
-```
-
-### Issue 2: Kernel Panic on Module Load
-
-**Problem:**
-Loading the module causes a kernel panic or NULL pointer dereference.
-
-**Root Cause:**
-The `bpf_struct_ops` structure was missing required callback functions that the kernel tries to access during registration:
-- `.verifier_ops` - BPF verifier operations (NULL pointer dereference)
-- `.init` - BTF initialization callback
-- `.init_member` - Member initialization callback
-
-**Error Pattern in dmesg:**
-```
-BUG: kernel NULL pointer dereference
-Call Trace:
-  register_bpf_struct_ops
-  ...
-```
-
-**Solution:**
-Add the required callbacks to the module (`module/hello.c`):
-
-```c
-/* BTF initialization callback */
-static int bpf_testmod_ops_init(struct btf *btf)
-{
-    /* Initialize BTF if needed */
-    return 0;
-}
-
-/* Verifier access control */
-static bool bpf_testmod_ops_is_valid_access(int off, int size,
-                                            enum bpf_access_type type,
-                                            const struct bpf_prog *prog,
-                                            struct bpf_insn_access_aux *info)
-{
-    /* Allow all accesses for this example */
-    return true;
-}
-
-/* Verifier operations structure */
-static const struct bpf_verifier_ops bpf_testmod_verifier_ops = {
-    .is_valid_access = bpf_testmod_ops_is_valid_access,
-};
-
-/* Member initialization callback */
-static int bpf_testmod_ops_init_member(const struct btf_type *t,
-                                       const struct btf_member *member,
-                                       void *kdata, const void *udata)
-{
-    /* No special member initialization needed */
-    return 0;
-}
-
-/* Updated struct_ops definition with ALL required callbacks */
-static struct bpf_struct_ops bpf_testmod_ops_struct_ops = {
-    .verifier_ops = &bpf_testmod_verifier_ops,  // REQUIRED
-    .init = bpf_testmod_ops_init,              // REQUIRED
-    .init_member = bpf_testmod_ops_init_member, // REQUIRED
-    .reg = bpf_testmod_ops_reg,
-    .unreg = bpf_testmod_ops_unreg,
-    .cfi_stubs = &__bpf_ops_bpf_testmod_ops,
-    .name = "bpf_testmod_ops",
-    .owner = THIS_MODULE,
-};
-```
-
-**Why This Matters:**
-The kernel's `register_bpf_struct_ops()` function expects these callbacks to be present. When it tries to call them and finds NULL pointers, it causes a kernel panic. These callbacks are essential for:
-- **verifier_ops**: Validates BPF program access to struct_ops members
-- **init**: Initializes BTF type information for the struct_ops
-- **init_member**: Handles special initialization for data members
-
-After adding these callbacks, rebuild and reload:
-```bash
-cd module
-make clean
-make
-sudo insmod hello.ko
-dmesg | tail
-# Should see: "bpf_testmod loaded with struct_ops support"
-```
-
-### Issue 3: BPF Program Load Failure - Invalid Helper
-
-**Problem:**
-```
-libbpf: prog 'bpf_testmod_test_1': BPF program load failed: Invalid argument
-program of this type cannot use helper bpf_trace_printk#6
-```
-
-**Root Cause:**
-struct_ops BPF programs have restricted helper function access. `bpf_trace_printk` (bpf_printk) is not allowed in struct_ops context because these programs run in a different context than tracing programs.
-
-**Solution:**
-Remove all `bpf_printk()` calls from struct_ops BPF programs:
-
-```c
-// BEFORE (fails to load):
-SEC("struct_ops/test_1")
-int BPF_PROG(bpf_testmod_test_1)
-{
-    bpf_printk("BPF test_1 called!\n");  // NOT ALLOWED
-    return 42;
-}
-
-// AFTER (works):
-SEC("struct_ops/test_1")
-int BPF_PROG(bpf_testmod_test_1)
-{
-    /* Return a special value to indicate BPF implementation */
-    return 42;
-}
-```
-
-**Alternative Debugging Approaches:**
-1. Use BPF maps to export counters/statistics to userspace
-2. Use the kernel module's `printk()` to log struct_ops invocations
-3. Use `bpftool prog tracelog` to see what programs are being called
-
-### Verification Checklist
-
-After resolving all issues, verify everything works:
-
-```bash
-# 1. Check module BTF
-readelf -S module/hello.ko | grep BTF
-
-# 2. Load module successfully
-sudo insmod module/hello.ko
-dmesg | tail -5
-# Should see: "bpf_testmod loaded with struct_ops support"
-
-# 3. Verify proc file created
-ls -l /proc/bpf_testmod_trigger
-# Should exist with write permissions
-
-# 4. Build and load BPF program
-make
-sudo ./struct_ops
-# Should see: "Successfully loaded and attached BPF struct_ops!"
-
-# 5. Verify callbacks are being invoked
-sudo dmesg | tail -20
-# Should see periodic output:
-#   Calling struct_ops callbacks:
-#   test_1() returned: 42
-#   test_2(10, 20) returned: 30
-#   test_3() called with buffer
-
-# 6. Clean up
-sudo rmmod hello
-```
-
-### Key Takeaways
-
-1. **BTF is mandatory** for struct_ops - ensure `vmlinux` is available and `pahole` is recent enough
-2. **All required callbacks must be present** in the `bpf_struct_ops` structure (verifier_ops, init, init_member)
-3. **Helper restrictions apply** - struct_ops programs cannot use tracing helpers like `bpf_printk`
-4. **Test incrementally** - load module first, then BPF program, to isolate issues
-
-## Kernel Source Code Analysis
-
-### Root Cause of Kernel Panic (Confirmed from Kernel 6.18-rc4 Source)
-
-The kernel panic was caused by **missing NULL pointer checks** in the kernel's struct_ops registration code. Analysis of the Linux kernel source code (version 6.18-rc4) reveals three critical locations where callback pointers are dereferenced without validation:
-
-#### 1. Missing NULL check for `st_ops->init` callback
-**Location**: `kernel/bpf/bpf_struct_ops.c:381`
-
-```c
-if (st_ops->init(btf)) {          // ← NULL pointer dereference if init is NULL
-    pr_warn("Error in init bpf_struct_ops %s\n",
-        st_ops->name);
-    err = -EINVAL;
-    goto errout;
-}
-```
-
-The code calls `st_ops->init(btf)` directly in the `bpf_struct_ops_desc_init()` function without checking if the callback exists. If a module registers struct_ops with `init = NULL`, this causes an immediate kernel panic.
-
-#### 2. Missing NULL check for `st_ops->init_member` callback
-**Location**: `kernel/bpf/bpf_struct_ops.c:753`
-
-```c
-err = st_ops->init_member(t, member, kdata, udata);  // ← NULL pointer dereference
-if (err < 0)
-    goto reset_unlock;
-
-/* The ->init_member() has handled this member */
-if (err > 0)
-    continue;
-```
-
-During map update operations, the kernel calls `st_ops->init_member()` for each struct member without verifying the callback pointer is non-NULL.
-
-#### 3. Missing NULL check for `st_ops->verifier_ops`
-**Location**: `kernel/bpf/verifier.c:23486`
-
-```c
-env->ops = st_ops->verifier_ops;  // ← Assigns potentially NULL pointer
-```
-
-The BPF verifier assigns `verifier_ops` directly and later dereferences it through `env->ops->*` calls. If `verifier_ops` is NULL, subsequent verifier operations will cause a kernel panic.
-
-### Why These Callbacks Are Mandatory
-
-The kernel code **assumes** these callbacks exist and does not provide fallback behavior:
-
-1. **`init`**: Called during struct_ops registration to initialize BTF type information. No default implementation exists.
-2. **`init_member`**: Called for each struct member during map updates to handle special initialization. Return value of 0 means "not handled", >0 means "handled", <0 is error.
-3. **`verifier_ops`**: Provides verification operations (e.g., `is_valid_access`) that control BPF program access to struct_ops context.
-
-### Is This Fixed in Current Kernel?
-
-**No.** As of Linux kernel 6.18-rc4 (checked 2025-11-10), these NULL pointer dereferences still exist. The kernel code has not added defensive NULL checks for these callbacks.
-
-This means:
-- ✅ **Our fix is correct** - providing all three callbacks prevents the kernel panic
-- ❌ **Kernel could be more defensive** - ideally it should validate callbacks before dereferencing
-- ⚠️ **All struct_ops modules MUST provide these callbacks** - this is an undocumented requirement
-
-### Recommendation for Kernel Upstream
-
-The kernel should add validation before dereferencing these pointers:
-
-```c
-// Suggested fix for kernel/bpf/bpf_struct_ops.c:381
-if (st_ops->init && st_ops->init(btf)) {
-    pr_warn("Error in init bpf_struct_ops %s\n", st_ops->name);
-    err = -EINVAL;
-    goto errout;
-}
-
-// Suggested fix for kernel/bpf/bpf_struct_ops.c:753
-if (st_ops->init_member) {
-    err = st_ops->init_member(t, member, kdata, udata);
-    if (err < 0)
-        goto reset_unlock;
-    if (err > 0)
-        continue;
-}
-
-// Suggested fix for registration
-if (!st_ops->verifier_ops) {
-    pr_warn("struct_ops %s missing verifier_ops\n", st_ops->name);
-    return -EINVAL;
-}
-```
-
-However, until such changes are merged, **all struct_ops implementations must provide these callbacks** to avoid kernel panics.
 
 ---
 
-## Additional Resources
+## 贡献
 
-- **Kernel Test Module**: `/home/yunwei37/linux/tools/testing/selftests/bpf/test_kmods/bpf_testmod.c` - Official kernel reference implementation
-- **BPF Documentation**: https://www.kernel.org/doc/html/latest/bpf/
+欢迎提交新的策略实现！请确保：
+1. 添加详细的注释说明策略逻辑
+2. 提供性能测试数据
+3. 更新本README
 
-## Contributing
-
-If you encounter similar issues or have improvements, please document them and contribute back to the tutorial.
-
----
-
-## Issue 4: Cannot Re-attach struct_ops - "Failed to attach struct_ops"
-
-### Problem
-After running the `struct_ops` program and stopping it (with Ctrl-C or killing the process), attempting to run it again fails with:
-```
-Failed to attach struct_ops
-```
-
-Even though the process has exited, `lsmod` shows the kernel module reference count is still > 0:
-```bash
-$ lsmod | grep nvidia_uvm
-nvidia_uvm  2162688  1    # ← Reference count is 1, preventing re-attachment
-```
-
-### Root Cause
-
-The struct_ops registration system only allows **one active instance** at a time. The kernel module's registration code uses atomic compare-and-swap to enforce this:
-
-```c
-/* Only one instance at a time */
-if (cmpxchg(&testmod_ops, NULL, ops) != NULL)
-    return -EEXIST;  // ← Returns error if already registered
-```
-
-When a BPF program is loaded and attaches struct_ops, it:
-1. **Holds a reference** to the kernel module (prevents `rmmod`)
-2. **Registers the struct_ops callbacks** with the kernel module
-3. **Keeps the registration active** until explicitly destroyed
-
-The issue occurs when:
-- The userspace process exits **without properly calling `bpf_link__destroy()`**
-- This leaves the BPF programs loaded in the kernel
-- The struct_ops registration remains active
-- The module reference count stays elevated
-
-### Diagnosis Using bpftool
-
-Use `bpftool` to inspect BPF programs and maps:
-
-```bash
-# 1. Check if struct_ops programs are still loaded
-sudo bpftool prog show | grep struct_ops
-
-# Example output showing orphaned programs:
-# 3823: struct_ops  name bpf_testmod_test_1  tag 397299f95b412a64  gpl
-# 3825: struct_ops  name bpf_testmod_test_2  tag 537ead463891f5a6  gpl
-# 3826: struct_ops  name bpf_testmod_test_3  tag 68c5a916ec10267f  gpl
-
-# 2. Check struct_ops map
-sudo bpftool map show | grep struct_ops
-
-# Example output:
-# 340: struct_ops  name testmod_ops  flags 0x8000
-#      pids struct_ops(1045213)  # ← Shows PID holding the map
-
-# 3. View detailed map info
-sudo bpftool map show id 340
-
-# Output shows:
-# 340: struct_ops  name testmod_ops  flags 0x8000
-#      key 4B  value 128B  max_entries 1  memlock 4848B
-#      btf_id 2835
-#      pids struct_ops(1045213)  # ← Process 1045213 holds this map
-```
-
-### Solution 1: Kill the Process Holding struct_ops
-
-Find and kill the process that holds the BPF map reference:
-
-```bash
-# 1. Find the PID from bpftool output
-sudo bpftool map show | grep struct_ops
-# Output: pids struct_ops(1045213)
-
-# 2. Verify the process
-ps aux | grep 1045213
-# Output: root  1045213  0.0  0.0  24944 23288 ?  S  22:35  0:00 ./struct_ops
-
-# 3. Kill the process
-sudo kill 1045213
-
-# 4. Wait a moment for cleanup (1-2 seconds)
-sleep 2
-
-# 5. Verify map is gone
-sudo bpftool map show id 340
-# Output: Error: get map by id (340): No such file or directory  ✓
-
-# 6. Verify module reference count is 0
-lsmod | grep nvidia_uvm
-# Output: nvidia_uvm  2162688  0  ✓
-
-# 7. Check kernel log for unregister message
-sudo dmesg | tail -3
-# Output: bpf_testmod_ops unregistered from nvidia-uvm  ✓
-```
-
-### Solution 2: Programmatic Cleanup in Userspace
-
-Add automatic cleanup detection to the userspace program:
-
-```c
-/* Check for old struct_ops instances before attaching */
-static int cleanup_old_struct_ops(void) {
-    __u32 map_id = 0;
-    int cleaned = 0;
-    int err;
-
-    printf("Checking for old struct_ops instances...\n");
-
-    /* Iterate through all BPF maps */
-    while (1) {
-        struct bpf_map_info info = {};
-        __u32 len = sizeof(info);
-        int fd;
-
-        err = bpf_map_get_next_id(map_id, &map_id);
-        if (err) {
-            if (errno == ENOENT)
-                break; /* No more maps */
-            continue;
-        }
-
-        fd = bpf_map_get_fd_by_id(map_id);
-        if (fd < 0)
-            continue;
-
-        err = bpf_obj_get_info_by_fd(fd, &info, &len);
-        if (err) {
-            close(fd);
-            continue;
-        }
-
-        /* Check if this is our struct_ops map */
-        if (info.type == BPF_MAP_TYPE_STRUCT_OPS &&
-            strcmp(info.name, "testmod_ops") == 0) {
-            printf("Found old struct_ops map (ID: %u)\n", info.id);
-            printf("Please kill the holding process first.\n");
-            printf("Use: sudo kill <PID> (find PID with bpftool)\n");
-            close(fd);
-            return -EEXIST;
-        }
-
-        close(fd);
-    }
-
-    printf("No old struct_ops instances found.\n");
-    return 0;
-}
-
-int main(int argc, char **argv) {
-    /* ... */
-
-    /* Check for old instances before loading */
-    if (cleanup_old_struct_ops() != 0) {
-        fprintf(stderr, "Please clean up old struct_ops first\n");
-        return 1;
-    }
-
-    /* ... continue with normal flow ... */
-}
-```
-
-### Solution 3: Unload and Reload Kernel Module
-
-If you can't find the holding process, or want to force cleanup:
-
-```bash
-# 1. Try normal module unload (may fail if referenced)
-sudo rmmod nvidia_uvm
-
-# If it fails with "Module is in use":
-
-# 2. Find and kill all struct_ops processes
-ps aux | grep struct_ops
-sudo pkill -9 struct_ops
-
-# 3. Wait for kernel cleanup
-sleep 3
-
-# 4. Retry module unload
-sudo rmmod nvidia_uvm
-
-# 5. Reload the module
-sudo insmod /path/to/nvidia-uvm.ko
-
-# 6. Verify clean state
-lsmod | grep nvidia_uvm
-# Should show reference count 0
-```
-
-### Why Deleting Maps Doesn't Work
-
-You might try to delete the struct_ops map directly:
-
-```bash
-# This DOES NOT work:
-sudo bpftool map pin id 340 /sys/fs/bpf/testmod_cleanup
-sudo rm /sys/fs/bpf/testmod_cleanup
-
-# The map still exists!
-sudo bpftool map show id 340
-# Output: 340: struct_ops  name testmod_ops  ...  ✓ Still there
-```
-
-**Why?** Because:
-1. Pinning creates a **filesystem reference** to the map
-2. Deleting the pinned file removes only the **filesystem reference**
-3. The **process reference** still exists (the program holds an FD)
-4. Maps are only deleted when **all references** (filesystem + process FDs) are gone
-
-### Prevention: Always Handle Cleanup Properly
-
-Ensure your userspace program properly destroys links on exit:
-
-```c
-int main(int argc, char **argv) {
-    struct struct_ops_bpf *skel;
-    struct bpf_link *link;
-
-    /* ... load and attach ... */
-
-    /* Main loop */
-    while (!exiting) {
-        sleep(1);
-    }
-
-    printf("\nDetaching struct_ops...\n");
-    bpf_link__destroy(link);  // ← CRITICAL: Always call this
-
-cleanup:
-    struct_ops_bpf__destroy(skel);
-    return 0;
-}
-```
-
-### Key Takeaways
-
-1. **struct_ops allows only ONE instance** - enforced by atomic compare-and-swap
-2. **Process references prevent cleanup** - killing the process is necessary
-3. **bpftool is essential for debugging** - use it to find orphaned programs/maps
-4. **Pinning/unpinning doesn't delete maps** - only removes filesystem references
-5. **Always call `bpf_link__destroy()`** - ensures proper cleanup on program exit
-6. **Module reference counting matters** - struct_ops holds module references
-7. **Check before attaching** - programmatic detection prevents confusing errors
-
-### Testing the Fix
-
-After implementing cleanup detection:
-
-```bash
-# 1. Run struct_ops program
-sudo ./struct_ops
-# Output: Checking for old struct_ops instances...
-#         No old struct_ops instances found.
-#         Successfully loaded and attached BPF struct_ops!
-
-# 2. Kill it abruptly (simulating crash)
-sudo pkill -9 struct_ops
-
-# 3. Try to run again immediately
-sudo ./struct_ops
-# Output: Checking for old struct_ops instances...
-#         Found old struct_ops map (ID: 396)
-#         Please kill the holding process first.
-#         Please clean up old struct_ops first
-
-# 4. Find and kill the zombie process
-sudo bpftool map show | grep struct_ops
-# Output: pids struct_ops(1045213)
-sudo kill 1045213
-
-# 5. Now it works
-sudo ./struct_ops
-# Output: Checking for old struct_ops instances...
-#         No old struct_ops instances found.
-#         Successfully loaded and attached BPF struct_ops!
-```
-
-This provides clear feedback to users about what's wrong and how to fix it.
+Happy optimizing! 🚀

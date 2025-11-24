@@ -9,6 +9,7 @@ struct uvm_gpu_ext {
 	int (*uvm_bpf_test_trigger_kfunc)(const char *, int);
 	int (*uvm_prefetch_before_compute)(uvm_page_index_t, uvm_perf_prefetch_bitmap_tree_t *, uvm_va_block_region_t *, uvm_va_block_region_t *);
 	int (*uvm_prefetch_on_tree_iter)(uvm_perf_prefetch_bitmap_tree_t *, uvm_va_block_region_t *, uvm_va_block_region_t *, unsigned int, uvm_va_block_region_t *);
+	
 	int (*uvm_pmm_chunk_activate)(uvm_pmm_gpu_t *, uvm_gpu_chunk_t *, struct list_head *);
 	int (*uvm_pmm_chunk_used)(uvm_pmm_gpu_t *, uvm_gpu_chunk_t *, struct list_head *);
 	int (*uvm_pmm_eviction_prepare)(uvm_pmm_gpu_t *, struct list_head *, struct list_head *);

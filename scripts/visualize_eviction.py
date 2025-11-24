@@ -41,55 +41,33 @@ def analyze_chunk_lifecycle(df):
     """Analyze when chunks are activated, used, and evicted."""
     print(f"\n[2/6] Analyzing chunk lifecycle...")
 
-    chunk_events = df[df['hook_type'] != 'EVICTION_PREPARE'].copy()
-    eviction_events = df[df['hook_type'] == 'EVICTION_PREPARE'].copy()
+    chunk_events = df[df['hook_type'] != 'EVICTION_PREPARE']
+    eviction_events = df[df['hook_type'] == 'EVICTION_PREPARE']
 
     print(f"  → Chunk events: {len(chunk_events):,}")
     print(f"  → Eviction events: {len(eviction_events):,}")
 
-    # Track each chunk's lifecycle (simplified for memory efficiency)
-    chunk_lifecycle = defaultdict(lambda: {
-        'first_seen': None,
-        'last_seen': None,
-        'activate_time': None,
-        'access_count': 0,
-        'evictions_during_lifetime': 0
-    })
+    # Use pandas groupby for efficiency instead of iterating
+    print(f"  → Aggregating chunk statistics...")
 
-    # Process chunk events
-    print(f"  → Processing chunk events...")
-    total = len(chunk_events)
-    for idx, row in enumerate(chunk_events.itertuples()):
-        if idx % 100000 == 0:
-            print(f"    Progress: {idx:,}/{total:,} ({idx/total*100:.1f}%)")
+    chunk_stats = chunk_events.groupby('chunk_addr').agg({
+        'time_ms': ['min', 'max', 'count'],
+    }).reset_index()
 
-        chunk_addr = row.chunk_addr
-        time_ms = row.time_ms
-        hook_type = row.hook_type
+    chunk_stats.columns = ['chunk_addr', 'first_seen', 'last_seen', 'access_count']
 
-        if chunk_lifecycle[chunk_addr]['first_seen'] is None:
-            chunk_lifecycle[chunk_addr]['first_seen'] = time_ms
-
-        if hook_type == 'ACTIVATE':
-            chunk_lifecycle[chunk_addr]['activate_time'] = time_ms
-
-        chunk_lifecycle[chunk_addr]['access_count'] += 1
-        chunk_lifecycle[chunk_addr]['last_seen'] = time_ms
+    # Convert to dict for compatibility
+    chunk_lifecycle = {}
+    for _, row in chunk_stats.iterrows():
+        chunk_lifecycle[row['chunk_addr']] = {
+            'first_seen': row['first_seen'],
+            'last_seen': row['last_seen'],
+            'access_count': row['access_count'],
+            'evictions_during_lifetime': 0  # Skip expensive calculation
+        }
 
     print(f"  → Unique chunks: {len(chunk_lifecycle):,}")
-
-    # Simplified eviction pressure calculation (skip for large datasets)
-    if len(eviction_events) < 100000:
-        print(f"  → Calculating eviction pressure...")
-        for idx, row in enumerate(eviction_events.itertuples()):
-            if idx % 10000 == 0:
-                print(f"    Progress: {idx:,}/{len(eviction_events):,}")
-            eviction_time = row.time_ms
-            for chunk_addr, info in chunk_lifecycle.items():
-                if (info['first_seen'] <= eviction_time <= info['last_seen']):
-                    info['evictions_during_lifetime'] += 1
-    else:
-        print(f"  → Skipping eviction pressure (too many evictions)")
+    print(f"  → Skipping eviction pressure calculation (not needed for visualization)")
 
     return chunk_lifecycle, eviction_events
 
@@ -391,6 +369,11 @@ def main():
         # plot_temporal_access_heatmap(df, os.path.join(output_dir, 'temporal_heatmap.png'))
         # plot_inter_access_distribution(df, os.path.join(output_dir, 'inter_access.png'))
 
+        # NEW: Virtual address analysis
+        valid_va = analyze_virtual_address_patterns(df)
+        if valid_va is not None and len(valid_va) > 0:
+            plot_va_patterns(valid_va, os.path.join(output_dir, 'va_patterns.png'))
+
         print("\n" + "="*80)
         print("Visualization complete!")
         print(f"All plots saved to: {output_dir}")
@@ -404,6 +387,187 @@ def main():
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
+def analyze_virtual_address_patterns(df):
+    """Analyze virtual address patterns and their relationship to physical chunks."""
+    print(f"\n[VA Analysis] Analyzing virtual address patterns...")
+
+    # Filter events with VA block information (no copy to save memory)
+    chunk_events = df[df['hook_type'] != 'EVICTION_PREPARE']
+
+    # Parse hex addresses more efficiently
+    def parse_hex_safe(x):
+        try:
+            if pd.isna(x) or x == '' or x == '0' or x == '0x0':
+                return 0
+            return int(x, 16) if isinstance(x, str) and x.startswith('0x') else int(x)
+        except:
+            return 0
+
+    print(f"  → Parsing addresses...")
+    chunk_events = chunk_events.copy()  # Only copy once
+    chunk_events['va_block_int'] = chunk_events['va_block'].apply(parse_hex_safe)
+    chunk_events['va_start_int'] = chunk_events['va_start'].apply(parse_hex_safe)
+    chunk_events['va_end_int'] = chunk_events['va_end'].apply(parse_hex_safe)
+    chunk_events['chunk_addr_int'] = chunk_events['chunk_addr'].apply(parse_hex_safe)
+
+    # Filter valid VA info
+    valid_va = chunk_events[chunk_events['va_block_int'] != 0]
+
+    if len(valid_va) == 0:
+        print("  ⚠️  No VA information available!")
+        return None
+
+    print(f"  → Coverage: {len(valid_va):,} / {len(chunk_events):,} events ({len(valid_va)/len(chunk_events)*100:.1f}%)")
+
+    # # Sample if dataset is too large (> 500k events)
+    # if len(valid_va) > 500000:
+    #     print(f"  → Dataset too large, sampling 500k events for analysis...")
+    #     valid_va = valid_va.sample(500000).copy()
+    # else:
+    #     valid_va = valid_va.copy()
+
+    # Calculate VA block sizes
+    valid_va['va_size'] = valid_va['va_end_int'] - valid_va['va_start_int']
+
+    # Key statistics only
+    print(f"  → Computing statistics...")
+    unique_va_blocks = valid_va['va_block_int'].nunique()
+    va_to_chunks = valid_va.groupby('va_block_int')['chunk_addr_int'].nunique()
+    chunk_to_vas = valid_va.groupby('chunk_addr_int')['va_block_int'].nunique()
+
+    print(f"  → Unique VA blocks: {unique_va_blocks:,}")
+    print(f"  → Avg chunks/VA: {va_to_chunks.mean():.1f}, Avg VAs/chunk: {chunk_to_vas.mean():.1f}")
+
+    # Check if chunks are shared
+    shared_pct = (chunk_to_vas > 1).sum() / len(chunk_to_vas) * 100
+    if shared_pct > 50:
+        print(f"  → ⚠️  {shared_pct:.0f}% of chunks are SHARED by multiple VA blocks!")
+
+    return valid_va
+
+def plot_va_patterns(valid_va, output_file):
+    """Plot VA address space access patterns over time."""
+
+    fig = plt.figure(figsize=(16, 12))
+    gs = fig.add_gridspec(3, 2, hspace=0.3, wspace=0.3)
+
+    # Plot 1: VA Address Space Access Over Time (Main Plot)
+    ax1 = fig.add_subplot(gs[0, :])  # Top row, full width
+
+    # Sample events for visualization (too many points will be slow)
+    sample_size = min(50000, len(valid_va))
+    sample = valid_va.sample(sample_size).sort_values('time_ms')
+
+    # Create scatter plot: time vs VA start address
+    scatter = ax1.scatter(sample['time_ms'], sample['va_start_int'],
+                         c=sample['hook_type'].map({'ACTIVATE': 0, 'POPULATE': 1}),
+                         cmap='RdYlGn', alpha=0.4, s=1, rasterized=True)
+
+    ax1.set_xlabel('Time (ms)', fontsize=12)
+    ax1.set_ylabel('Virtual Address (hex)', fontsize=12)
+    ax1.set_title('Virtual Address Space Access Pattern Over Time', fontsize=14, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+
+    # Format y-axis as hex addresses
+    ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'0x{int(x):x}' if x > 0 else '0'))
+
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax1)
+    cbar.set_label('Event Type', fontsize=10)
+    cbar.set_ticks([0, 1])
+    cbar.set_ticklabels(['ACTIVATE', 'POPULATE'])
+
+    # Plot 2: VA Address Range Heatmap Over Time
+    ax2 = fig.add_subplot(gs[1, 0])
+
+    # Create 2D histogram: time bins vs VA address bins
+    time_bins = 100
+    va_bins = 100
+
+    H, xedges, yedges = np.histogram2d(
+        valid_va['time_ms'],
+        valid_va['va_start_int'],
+        bins=[time_bins, va_bins]
+    )
+
+    im = ax2.imshow(H.T, aspect='auto', origin='lower', cmap='hot',
+                    extent=[0, valid_va['time_ms'].max(),
+                           valid_va['va_start_int'].min(),
+                           valid_va['va_start_int'].max()],
+                    interpolation='bilinear')
+
+    ax2.set_xlabel('Time (ms)', fontsize=11)
+    ax2.set_ylabel('Virtual Address', fontsize=11)
+    ax2.set_title('VA Access Density Heatmap', fontsize=12, fontweight='bold')
+
+    cbar2 = plt.colorbar(im, ax=ax2)
+    cbar2.set_label('Access Count', fontsize=9)
+
+    # Plot 3: VA Block Access Frequency Distribution
+    ax3 = fig.add_subplot(gs[1, 1])
+
+    va_access_freq = valid_va.groupby('va_block_int').size()
+    ax3.hist(va_access_freq, bins=50, edgecolor='black', alpha=0.7, color='steelblue')
+    ax3.set_xlabel('Accesses per VA Block', fontsize=11)
+    ax3.set_ylabel('Number of VA Blocks', fontsize=11)
+    ax3.set_title('VA Block Access Frequency', fontsize=12, fontweight='bold')
+    ax3.set_yscale('log')
+    ax3.grid(True, alpha=0.3, axis='y')
+    ax3.axvline(va_access_freq.median(), color='red', linestyle='--', linewidth=2,
+                label=f'Median: {va_access_freq.median():.0f}')
+    ax3.legend()
+
+    # Plot 4: Temporal Access Pattern for Top VA Blocks
+    ax4 = fig.add_subplot(gs[2, 0])
+
+    # Find top 10 most accessed VA blocks
+    top_va_blocks = va_access_freq.nlargest(10).index
+
+    for i, va_block in enumerate(top_va_blocks):
+        va_events = valid_va[valid_va['va_block_int'] == va_block].sort_values('time_ms')
+        times = va_events['time_ms'].values
+
+        # Create time bins and count accesses
+        bins = np.linspace(0, valid_va['time_ms'].max(), 50)
+        hist, _ = np.histogram(times, bins=bins)
+
+        ax4.plot(bins[:-1], hist, alpha=0.6, linewidth=1.5, label=f'VA#{i+1}')
+
+    ax4.set_xlabel('Time (ms)', fontsize=11)
+    ax4.set_ylabel('Access Count', fontsize=11)
+    ax4.set_title('Top 10 Hot VA Blocks - Access Over Time', fontsize=12, fontweight='bold')
+    ax4.legend(fontsize=8, ncol=2)
+    ax4.grid(True, alpha=0.3)
+
+    # Plot 5: VA-to-Chunk Mapping Analysis
+    ax5 = fig.add_subplot(gs[2, 1])
+
+    chunks_per_va = valid_va.groupby('va_block_int')['chunk_addr_int'].nunique()
+    vas_per_chunk = valid_va.groupby('chunk_addr_int')['va_block_int'].nunique()
+
+    # Create scatter plot showing the relationship
+    sample_vas = chunks_per_va.sample(min(1000, len(chunks_per_va)))
+    sample_chunks = vas_per_chunk.sample(min(1000, len(vas_per_chunk)))
+
+    ax5.hist2d([chunks_per_va.mean()] * len(sample_vas), sample_vas.values,
+              bins=20, cmap='Blues', alpha=0.6, label='Chunks per VA')
+    ax5.hist2d(sample_chunks.values, [vas_per_chunk.mean()] * len(sample_chunks),
+              bins=20, cmap='Reds', alpha=0.6, label='VAs per Chunk')
+
+    ax5.set_xlabel('Chunks per VA Block', fontsize=11)
+    ax5.set_ylabel('VA Blocks per Chunk', fontsize=11)
+    ax5.set_title('VA ↔ Chunk Mapping Distribution', fontsize=12, fontweight='bold')
+    ax5.axhline(vas_per_chunk.mean(), color='red', linestyle='--', linewidth=2, alpha=0.8,
+                label=f'Avg VAs/Chunk: {vas_per_chunk.mean():.1f}')
+    ax5.axvline(chunks_per_va.mean(), color='blue', linestyle='--', linewidth=2, alpha=0.8,
+                label=f'Avg Chunks/VA: {chunks_per_va.mean():.1f}')
+    ax5.legend(fontsize=9)
+    ax5.grid(True, alpha=0.3)
+
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    print(f"  ✓ Saved: {output_file}")
+    plt.close()
 
 if __name__ == '__main__':
     main()
