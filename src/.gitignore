@@ -12,3 +12,4 @@ prefetch_always_max
 prefetch_none
 cleanup_struct_ops_tool
 lru_fifo
+chunk_trace
