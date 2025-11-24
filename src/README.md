@@ -5,6 +5,7 @@
 
 timeout 30 sudo /home/yunwei37/workspace/gpu/co-processor-demo/gpu_ext_policy/src/chunk_trace > /tmp/test_trace.csv
 
+python /home/yunwei37/workspace/gpu/co-processor-demo/gpu_ext_policy/scripts/visualize_eviction.py /tmp/test_trace.csv
 
 
 ## 📋 目录
