@@ -15,6 +15,21 @@
 static volatile bool exiting = false;
 static nvmlDevice_t nvml_device = NULL;
 
+/* Configuration */
+static struct {
+    int fixed_pct;           /* -1 means adaptive mode */
+    unsigned int min_pct;    /* min percentage for adaptive mode */
+    unsigned int max_pct;    /* max percentage for adaptive mode */
+    unsigned long long max_mbps;  /* max PCIe throughput for scaling */
+    int invert;              /* invert the adaptive logic */
+} config = {
+    .fixed_pct = -1,
+    .min_pct = 30,
+    .max_pct = 100,
+    .max_mbps = 20480ULL,    /* 20 GB/s */
+    .invert = 0,
+};
+
 void handle_signal(int sig) {
     exiting = true;
 }
@@ -29,39 +44,53 @@ static unsigned long long get_pcie_throughput_mbps(void) {
     return throughput_kbps / 1024;
 }
 
-/* Prefetch percentage proportional to PCIe traffic.
- * Goal: More traffic -> more prefetch (keep GPU fed with data)
+/* Calculate prefetch percentage based on PCIe throughput
  *
- * 20 GB/s = 20480 MB/s max.
- * - High traffic (20 GB/s)  -> 100% prefetch (aggressive, all pages)
- * - Low traffic (0 MB/s)    -> 0% prefetch (conservative, no pages)
+ * Normal mode (invert=0):
+ *   High traffic -> high percentage -> more prefetch
+ *   Low traffic  -> low percentage  -> less prefetch
  *
- * This matches tree_iter's behavior:
- * - tree_iter: high traffic -> low threshold -> more prefetch
- * - sequential: high traffic -> high percentage -> more pages
+ * Inverted mode (invert=1):
+ *   High traffic -> low percentage  -> less prefetch (bandwidth constrained)
+ *   Low traffic  -> high percentage -> more prefetch (bandwidth available)
  */
 static unsigned int calculate_prefetch_percentage(unsigned long long throughput_mbps) {
-    const unsigned long long max_mbps = 20480ULL; /* 20 GB/s */
-    const unsigned int min_pct = 30;              /* low traffic: prefetch less */
-    const unsigned int max_pct = 100;            /* high traffic: prefetch all */
+    if (throughput_mbps >= config.max_mbps) {
+        return config.invert ? config.min_pct : config.max_pct;
+    }
 
-    if (throughput_mbps >= max_mbps)
-        return max_pct;
+    double ratio = (double)throughput_mbps / (double)config.max_mbps; /* 0..1 */
 
-    /* ratio: 0.0 when idle, 1.0 when fully loaded */
-    double ratio = (double)throughput_mbps / (double)max_mbps; /* 0..1 */
-    unsigned int pct = (unsigned int)(min_pct + (max_pct - min_pct) * ratio + 0.5);
-    if (pct < min_pct) pct = min_pct;
-    if (pct > max_pct) pct = max_pct;
+    if (config.invert) {
+        ratio = 1.0 - ratio;  /* invert: high traffic -> low ratio */
+    }
+
+    unsigned int pct = (unsigned int)(config.min_pct +
+                                      (config.max_pct - config.min_pct) * ratio + 0.5);
+    if (pct < config.min_pct) pct = config.min_pct;
+    if (pct > config.max_pct) pct = config.max_pct;
     return pct;
 }
 
 static void print_usage(const char *prog) {
     printf("Usage: %s [OPTIONS]\n", prog);
+    printf("\nPrefetch Adaptive Sequential Policy\n");
+    printf("Controls what percentage of max_prefetch_region to prefetch.\n");
     printf("\nOptions:\n");
-    printf("  -p PCT    Set fixed prefetch percentage (0-100), disables adaptive mode\n");
-    printf("  -h        Show this help\n");
-    printf("\nWithout -p, the program uses adaptive mode based on PCIe throughput.\n");
+    printf("  -p PCT        Set fixed prefetch percentage (0-100), disables adaptive mode\n");
+    printf("  -m MIN        Set minimum percentage for adaptive mode (default: %u)\n", config.min_pct);
+    printf("  -M MAX        Set maximum percentage for adaptive mode (default: %u)\n", config.max_pct);
+    printf("  -b MBPS       Set max PCIe bandwidth for scaling in MB/s (default: %llu)\n", config.max_mbps);
+    printf("  -i            Invert adaptive logic (high traffic -> less prefetch)\n");
+    printf("  -h            Show this help\n");
+    printf("\nExamples:\n");
+    printf("  %s -p 100              # Fixed 100%% prefetch (like always_max)\n", prog);
+    printf("  %s -p 0                # Fixed 0%% prefetch (like none)\n", prog);
+    printf("  %s -p 50               # Fixed 50%% prefetch\n", prog);
+    printf("  %s                     # Adaptive mode (default)\n", prog);
+    printf("  %s -m 20 -M 80         # Adaptive with custom range 20-80%%\n", prog);
+    printf("  %s -i                  # Inverted: less prefetch when busy\n", prog);
+    printf("\nWithout -p, uses adaptive mode based on PCIe throughput.\n");
 }
 
 int main(int argc, char **argv) {
@@ -70,17 +99,36 @@ int main(int argc, char **argv) {
     int err;
     int pct_map_fd;
     unsigned int key = 0;
-    int fixed_pct = -1;  /* -1 means adaptive mode */
     int opt;
 
-    while ((opt = getopt(argc, argv, "p:h")) != -1) {
+    while ((opt = getopt(argc, argv, "p:m:M:b:ih")) != -1) {
         switch (opt) {
         case 'p':
-            fixed_pct = atoi(optarg);
-            if (fixed_pct < 0 || fixed_pct > 100) {
+            config.fixed_pct = atoi(optarg);
+            if (config.fixed_pct < 0 || config.fixed_pct > 100) {
                 fprintf(stderr, "Error: percentage must be 0-100\n");
                 return 1;
             }
+            break;
+        case 'm':
+            config.min_pct = (unsigned int)atoi(optarg);
+            if (config.min_pct > 100) {
+                fprintf(stderr, "Error: min percentage must be 0-100\n");
+                return 1;
+            }
+            break;
+        case 'M':
+            config.max_pct = (unsigned int)atoi(optarg);
+            if (config.max_pct > 100) {
+                fprintf(stderr, "Error: max percentage must be 0-100\n");
+                return 1;
+            }
+            break;
+        case 'b':
+            config.max_mbps = (unsigned long long)atoll(optarg);
+            break;
+        case 'i':
+            config.invert = 1;
             break;
         case 'h':
             print_usage(argv[0]);
@@ -91,15 +139,22 @@ int main(int argc, char **argv) {
         }
     }
 
+    /* Validate min/max */
+    if (config.min_pct > config.max_pct) {
+        fprintf(stderr, "Error: min percentage (%u) cannot be greater than max (%u)\n",
+                config.min_pct, config.max_pct);
+        return 1;
+    }
+
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
     /* Initialize NVML for adaptive mode */
-    if (fixed_pct < 0) {
+    if (config.fixed_pct < 0) {
         nvml_device = nvml_init_device();
         if (!nvml_device) {
             fprintf(stderr, "Warning: Failed to initialize NVML, using fixed 100%% mode\n");
-            fixed_pct = 100;
+            config.fixed_pct = 100;
         }
     }
 
@@ -129,7 +184,7 @@ int main(int argc, char **argv) {
     }
 
     /* Set initial percentage */
-    unsigned int initial_pct = (fixed_pct >= 0) ? (unsigned int)fixed_pct : 100;
+    unsigned int initial_pct = (config.fixed_pct >= 0) ? (unsigned int)config.fixed_pct : config.max_pct;
     err = bpf_map_update_elem(pct_map_fd, &key, &initial_pct, BPF_ANY);
     if (err) {
         fprintf(stderr, "Failed to set initial percentage: %d\n", err);
@@ -145,10 +200,13 @@ int main(int argc, char **argv) {
     }
 
     printf("Successfully loaded and attached BPF adaptive_sequential policy!\n");
-    if (fixed_pct >= 0) {
-        printf("Mode: Fixed prefetch percentage = %d%%\n", fixed_pct);
+    if (config.fixed_pct >= 0) {
+        printf("Mode: Fixed prefetch percentage = %d%%\n", config.fixed_pct);
     } else {
         printf("Mode: Adaptive (based on PCIe throughput)\n");
+        printf("  Range: %u%% - %u%%\n", config.min_pct, config.max_pct);
+        printf("  Max bandwidth: %llu MB/s\n", config.max_mbps);
+        printf("  Invert: %s\n", config.invert ? "yes" : "no");
         printf("Monitoring PCIe traffic and updating percentage every second...\n");
     }
     printf("Monitor dmesg for BPF debug output.\n");
@@ -156,7 +214,7 @@ int main(int argc, char **argv) {
 
     /* Main loop */
     while (!exiting) {
-        if (fixed_pct < 0) {
+        if (config.fixed_pct < 0) {
             /* Adaptive mode: update percentage based on PCIe throughput */
             unsigned long long throughput = get_pcie_throughput_mbps();
             unsigned int pct = calculate_prefetch_percentage(throughput);

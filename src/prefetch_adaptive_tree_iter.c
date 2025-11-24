@@ -15,6 +15,21 @@
 static volatile bool exiting = false;
 static nvmlDevice_t nvml_device = NULL;
 
+/* Configuration */
+static struct {
+    int fixed_thresh;        /* -1 means adaptive mode */
+    unsigned int min_thresh; /* min threshold for adaptive mode */
+    unsigned int max_thresh; /* max threshold for adaptive mode */
+    unsigned long long max_mbps;  /* max PCIe throughput for scaling */
+    int invert;              /* invert the adaptive logic */
+} config = {
+    .fixed_thresh = -1,
+    .min_thresh = 0,         /* high traffic: easier to prefetch */
+    .max_thresh = 100,       /* low traffic: harder to prefetch */
+    .max_mbps = 20480ULL,    /* 20 GB/s */
+    .invert = 0,
+};
+
 void handle_signal(int sig) {
     exiting = true;
 }
@@ -25,36 +40,70 @@ static unsigned long long get_pcie_throughput_mbps(void) {
         return 0;
     }
 
-    /* Get throughput in KB/s, convert to MB/s */
     unsigned long long throughput_kbps = nvml_get_pcie_throughput_kbps(nvml_device);
-    return throughput_kbps / 1024;  /* Convert KB/s to MB/s */
+    return throughput_kbps / 1024;
 }
 
-/* Threshold inversely proportional to PCIe traffic.
+/* Calculate threshold based on PCIe throughput
+ *
  * BPF logic: counter * 100 > subregion_pages * threshold
  *   - Low threshold  -> easier to pass -> more prefetch
  *   - High threshold -> harder to pass -> less prefetch
  *
- * Goal: More traffic -> more prefetch (keep GPU fed with data)
+ * Normal mode (invert=0):
+ *   High traffic -> low threshold  -> more prefetch (keep GPU fed)
+ *   Low traffic  -> high threshold -> less prefetch (save bandwidth)
  *
- * 20 GB/s = 20480 MB/s max.
- * - High traffic (20 GB/s)  -> threshold = 0%   -> prefetch more
- * - Low traffic (0 MB/s)    -> threshold = 100% -> prefetch less
+ * Inverted mode (invert=1):
+ *   High traffic -> high threshold -> less prefetch (bandwidth constrained)
+ *   Low traffic  -> low threshold  -> more prefetch (bandwidth available)
  */
 static unsigned int calculate_threshold(unsigned long long throughput_mbps) {
-    const unsigned long long max_mbps = 20480ULL; /* 20 GB/s */
-    const unsigned int max_thresh = 100;          /* low traffic: less prefetch */
-    const unsigned int min_thresh = 0;            /* high traffic: more prefetch */
+    if (throughput_mbps >= config.max_mbps) {
+        return config.invert ? config.max_thresh : config.min_thresh;
+    }
 
-    if (throughput_mbps >= max_mbps)
-        return min_thresh;
+    double ratio = (double)throughput_mbps / (double)config.max_mbps; /* 0..1 */
 
-    double ratio = (double)throughput_mbps / (double)max_mbps; /* 0..1 */
-    double inv = 1.0 - ratio;
-    unsigned int thresh = (unsigned int)(min_thresh + (max_thresh - min_thresh) * inv + 0.5);
-    if (thresh < min_thresh) thresh = min_thresh;
-    if (thresh > max_thresh) thresh = max_thresh;
+    unsigned int thresh;
+    if (config.invert) {
+        /* Inverted: high traffic -> high threshold */
+        thresh = (unsigned int)(config.min_thresh +
+                               (config.max_thresh - config.min_thresh) * ratio + 0.5);
+    } else {
+        /* Normal: high traffic -> low threshold (inverse relationship) */
+        double inv = 1.0 - ratio;
+        thresh = (unsigned int)(config.min_thresh +
+                               (config.max_thresh - config.min_thresh) * inv + 0.5);
+    }
+
+    if (thresh < config.min_thresh) thresh = config.min_thresh;
+    if (thresh > config.max_thresh) thresh = config.max_thresh;
     return thresh;
+}
+
+static void print_usage(const char *prog) {
+    printf("Usage: %s [OPTIONS]\n", prog);
+    printf("\nPrefetch Adaptive Tree Iter Policy\n");
+    printf("Controls threshold for prefetching based on access density.\n");
+    printf("BPF logic: prefetch if (counter * 100 > subregion_pages * threshold)\n");
+    printf("  - Low threshold  -> easier to prefetch\n");
+    printf("  - High threshold -> harder to prefetch\n");
+    printf("\nOptions:\n");
+    printf("  -t THRESH     Set fixed threshold (0-100), disables adaptive mode\n");
+    printf("  -m MIN        Set minimum threshold for adaptive mode (default: %u)\n", config.min_thresh);
+    printf("  -M MAX        Set maximum threshold for adaptive mode (default: %u)\n", config.max_thresh);
+    printf("  -b MBPS       Set max PCIe bandwidth for scaling in MB/s (default: %llu)\n", config.max_mbps);
+    printf("  -i            Invert adaptive logic (high traffic -> higher threshold)\n");
+    printf("  -h            Show this help\n");
+    printf("\nExamples:\n");
+    printf("  %s -t 0               # Fixed threshold 0%% (always prefetch)\n", prog);
+    printf("  %s -t 100             # Fixed threshold 100%% (almost never prefetch)\n", prog);
+    printf("  %s -t 50              # Fixed threshold 50%%\n", prog);
+    printf("  %s                    # Adaptive mode (default)\n", prog);
+    printf("  %s -m 10 -M 90        # Adaptive with custom range 10-90%%\n", prog);
+    printf("  %s -i                 # Inverted: higher threshold when busy\n", prog);
+    printf("\nWithout -t, uses adaptive mode based on PCIe throughput.\n");
 }
 
 int main(int argc, char **argv) {
@@ -63,14 +112,63 @@ int main(int argc, char **argv) {
     int err;
     int threshold_map_fd;
     unsigned int key = 0;
+    int opt;
+
+    while ((opt = getopt(argc, argv, "t:m:M:b:ih")) != -1) {
+        switch (opt) {
+        case 't':
+            config.fixed_thresh = atoi(optarg);
+            if (config.fixed_thresh < 0 || config.fixed_thresh > 100) {
+                fprintf(stderr, "Error: threshold must be 0-100\n");
+                return 1;
+            }
+            break;
+        case 'm':
+            config.min_thresh = (unsigned int)atoi(optarg);
+            if (config.min_thresh > 100) {
+                fprintf(stderr, "Error: min threshold must be 0-100\n");
+                return 1;
+            }
+            break;
+        case 'M':
+            config.max_thresh = (unsigned int)atoi(optarg);
+            if (config.max_thresh > 100) {
+                fprintf(stderr, "Error: max threshold must be 0-100\n");
+                return 1;
+            }
+            break;
+        case 'b':
+            config.max_mbps = (unsigned long long)atoll(optarg);
+            break;
+        case 'i':
+            config.invert = 1;
+            break;
+        case 'h':
+            print_usage(argv[0]);
+            return 0;
+        default:
+            print_usage(argv[0]);
+            return 1;
+        }
+    }
+
+    /* Validate min/max */
+    if (config.min_thresh > config.max_thresh) {
+        fprintf(stderr, "Error: min threshold (%u) cannot be greater than max (%u)\n",
+                config.min_thresh, config.max_thresh);
+        return 1;
+    }
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
-    /* Initialize NVML */
-    nvml_device = nvml_init_device();
-    if (!nvml_device) {
-        fprintf(stderr, "Warning: Failed to initialize NVML, using fallback mode\n");
+    /* Initialize NVML for adaptive mode */
+    if (config.fixed_thresh < 0) {
+        nvml_device = nvml_init_device();
+        if (!nvml_device) {
+            fprintf(stderr, "Warning: Failed to initialize NVML, using fixed threshold 50%%\n");
+            config.fixed_thresh = 50;
+        }
     }
 
     /* Check and report old struct_ops instances */
@@ -98,6 +196,15 @@ int main(int argc, char **argv) {
         goto cleanup;
     }
 
+    /* Set initial threshold */
+    unsigned int initial_thresh = (config.fixed_thresh >= 0) ?
+                                  (unsigned int)config.fixed_thresh : config.max_thresh;
+    err = bpf_map_update_elem(threshold_map_fd, &key, &initial_thresh, BPF_ANY);
+    if (err) {
+        fprintf(stderr, "Failed to set initial threshold: %d\n", err);
+        goto cleanup;
+    }
+
     /* Register struct_ops */
     link = bpf_map__attach_struct_ops(skel->maps.uvm_ops_adaptive_tree_iter);
     if (!link) {
@@ -107,25 +214,33 @@ int main(int argc, char **argv) {
     }
 
     printf("Successfully loaded and attached BPF adaptive_tree_iter policy!\n");
-    printf("Monitoring PCIe traffic and updating threshold every second...\n");
+    if (config.fixed_thresh >= 0) {
+        printf("Mode: Fixed threshold = %d%%\n", config.fixed_thresh);
+    } else {
+        printf("Mode: Adaptive (based on PCIe throughput)\n");
+        printf("  Range: %u%% - %u%%\n", config.min_thresh, config.max_thresh);
+        printf("  Max bandwidth: %llu MB/s\n", config.max_mbps);
+        printf("  Invert: %s\n", config.invert ? "yes" : "no");
+        printf("Monitoring PCIe traffic and updating threshold every second...\n");
+    }
     printf("Monitor dmesg for BPF debug output.\n");
     printf("\nPress Ctrl-C to exit and detach the policy...\n\n");
 
-    /* Main loop: Monitor PCIe traffic and update threshold */
+    /* Main loop */
     while (!exiting) {
-        unsigned long long throughput = get_pcie_throughput_mbps();
-        unsigned int threshold = calculate_threshold(throughput);
+        if (config.fixed_thresh < 0) {
+            /* Adaptive mode: update threshold based on PCIe throughput */
+            unsigned long long throughput = get_pcie_throughput_mbps();
+            unsigned int threshold = calculate_threshold(throughput);
 
-        /* Update threshold in BPF map */
-        err = bpf_map_update_elem(threshold_map_fd, &key, &threshold, BPF_ANY);
-        if (err) {
-            fprintf(stderr, "Failed to update threshold map: %d\n", err);
-        } else {
-            /* Print current stats */
-            printf("[%ld] PCIe Throughput: %llu MB/s -> Threshold: %u%%\n",
-                   time(NULL), throughput, threshold);
+            err = bpf_map_update_elem(threshold_map_fd, &key, &threshold, BPF_ANY);
+            if (err) {
+                fprintf(stderr, "Failed to update threshold map: %d\n", err);
+            } else {
+                printf("[%ld] PCIe: %llu MB/s -> Threshold: %u%%\n",
+                       time(NULL), throughput, threshold);
+            }
         }
-
         sleep(1);
     }
 
@@ -135,7 +250,6 @@ int main(int argc, char **argv) {
 cleanup:
     prefetch_adaptive_tree_iter_bpf__destroy(skel);
 
-    /* Cleanup NVML */
     if (nvml_device) {
         nvml_cleanup();
     }
