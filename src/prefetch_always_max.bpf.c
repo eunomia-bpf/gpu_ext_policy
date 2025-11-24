@@ -18,14 +18,14 @@ int BPF_PROG(uvm_prefetch_before_compute,
              uvm_va_block_region_t *max_prefetch_region,
              uvm_va_block_region_t *result_region)
 {
-    bpf_printk("BPF always_max: page_index=%u\n", page_index);
+    // bpf_printk("BPF always_max: page_index=%u\n", page_index);
 
     /* Use BPF CO-RE helpers to read max_prefetch_region fields */
     uvm_page_index_t max_first = BPF_CORE_READ(max_prefetch_region, first);
     uvm_page_index_t max_outer = BPF_CORE_READ(max_prefetch_region, outer);
 
-    bpf_printk("BPF always_max: Setting prefetch region [%u, %u)\n",
-               max_first, max_outer);
+    // bpf_printk("BPF always_max: Setting prefetch region [%u, %u)\n",
+    //            max_first, max_outer);
 
     /* Use kfunc to set result_region */
     bpf_uvm_set_va_block_region(result_region, max_first, max_outer);

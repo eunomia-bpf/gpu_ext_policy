@@ -21,7 +21,7 @@ INCLUDES := -I$(OUTPUT) -I../libbpf/include/uapi -I$(dir $(VMLINUX)) -I/usr/loca
 CFLAGS := -g -Wall
 ALL_LDFLAGS := $(LDFLAGS) $(EXTRA_LDFLAGS)
 
-BPF_APPS = struct_ops prefetch_always_max prefetch_none prefetch_adaptive_simple eviction_fifo eviction_lfu chunk_trace # BPF apps that need skeletons
+BPF_APPS = struct_ops prefetch_always_max prefetch_none prefetch_adaptive_tree_iter prefetch_adaptive_sequential eviction_fifo eviction_lfu chunk_trace # BPF apps that need skeletons
 TOOL_APPS = cleanup_struct_ops_tool # Pure userspace tools
 APPS = $(BPF_APPS) $(TOOL_APPS) # minimal minimal_legacy uprobe kprobe fentry usdt sockfilter tc ksyscall
 
@@ -133,13 +133,16 @@ $(patsubst %,$(OUTPUT)/%.o,$(BZS_APPS)): $(LIBBLAZESYM_HEADER)
 
 $(BZS_APPS): $(LIBBLAZESYM_OBJ)
 
-# Build application binary
-$(APPS): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
+# Apps that need NVML
+NVML_APPS = prefetch_adaptive_tree_iter prefetch_adaptive_sequential
+
+# Build application binary (exclude NVML apps from generic rule)
+$(filter-out $(NVML_APPS),$(APPS)): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
 	$(call msg,BINARY,$@)
 	$(Q)$(CC) $(CFLAGS) $^ $(ALL_LDFLAGS) -lelf -lz -o $@
 
-# Special rule for prefetch_adaptive_simple with NVML
-prefetch_adaptive_simple: $(OUTPUT)/prefetch_adaptive_simple.o $(LIBBPF_OBJ) | $(OUTPUT)
+# Special rule for apps with NVML
+$(NVML_APPS): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
 	$(call msg,BINARY,$@)
 	$(Q)$(CC) $(CFLAGS) $^ $(ALL_LDFLAGS) -lelf -lz -L/usr/local/cuda/lib64/stubs -lnvidia-ml -o $@
 

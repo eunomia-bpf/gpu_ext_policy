@@ -8,7 +8,7 @@
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
 
-#include "prefetch_adaptive_simple.skel.h"
+#include "prefetch_adaptive_tree_iter.skel.h"
 #include "cleanup_struct_ops.h"
 #include "nvml_monitor.h"
 
@@ -30,23 +30,35 @@ static unsigned long long get_pcie_throughput_mbps(void) {
     return throughput_kbps / 1024;  /* Convert KB/s to MB/s */
 }
 
-/* Calculate threshold based on PCIe throughput
- * Logic:
- *  - Low traffic (<100 MB/s): Aggressive prefetch (30%)
- *  - Medium traffic (100-300 MB/s): Default prefetch (51%)
- *  - High traffic (>300 MB/s): Conservative prefetch (75%)
+/* Threshold inversely proportional to PCIe traffic.
+ * BPF logic: counter * 100 > subregion_pages * threshold
+ *   - Low threshold  -> easier to pass -> more prefetch
+ *   - High threshold -> harder to pass -> less prefetch
+ *
+ * Goal: More traffic -> more prefetch (keep GPU fed with data)
+ *
+ * 20 GB/s = 20480 MB/s max.
+ * - High traffic (20 GB/s)  -> threshold = 0%   -> prefetch more
+ * - Low traffic (0 MB/s)    -> threshold = 100% -> prefetch less
  */
 static unsigned int calculate_threshold(unsigned long long throughput_mbps) {
-    if (throughput_mbps > 300)
-        return 75;  // High traffic -> conservative
-    else if (throughput_mbps > 100)
-        return 51;  // Medium traffic -> default
-    else
-        return 30;  // Low traffic -> aggressive
+    const unsigned long long max_mbps = 20480ULL; /* 20 GB/s */
+    const unsigned int max_thresh = 100;          /* low traffic: less prefetch */
+    const unsigned int min_thresh = 0;            /* high traffic: more prefetch */
+
+    if (throughput_mbps >= max_mbps)
+        return min_thresh;
+
+    double ratio = (double)throughput_mbps / (double)max_mbps; /* 0..1 */
+    double inv = 1.0 - ratio;
+    unsigned int thresh = (unsigned int)(min_thresh + (max_thresh - min_thresh) * inv + 0.5);
+    if (thresh < min_thresh) thresh = min_thresh;
+    if (thresh > max_thresh) thresh = max_thresh;
+    return thresh;
 }
 
 int main(int argc, char **argv) {
-    struct prefetch_adaptive_simple_bpf *skel;
+    struct prefetch_adaptive_tree_iter_bpf *skel;
     struct bpf_link *link;
     int err;
     int threshold_map_fd;
@@ -65,14 +77,14 @@ int main(int argc, char **argv) {
     cleanup_old_struct_ops();
 
     /* Open BPF application */
-    skel = prefetch_adaptive_simple_bpf__open();
+    skel = prefetch_adaptive_tree_iter_bpf__open();
     if (!skel) {
         fprintf(stderr, "Failed to open BPF skeleton\n");
         return 1;
     }
 
     /* Load BPF programs */
-    err = prefetch_adaptive_simple_bpf__load(skel);
+    err = prefetch_adaptive_tree_iter_bpf__load(skel);
     if (err) {
         fprintf(stderr, "Failed to load BPF skeleton: %d\n", err);
         goto cleanup;
@@ -87,14 +99,14 @@ int main(int argc, char **argv) {
     }
 
     /* Register struct_ops */
-    link = bpf_map__attach_struct_ops(skel->maps.uvm_ops_adaptive_simple);
+    link = bpf_map__attach_struct_ops(skel->maps.uvm_ops_adaptive_tree_iter);
     if (!link) {
         err = -errno;
         fprintf(stderr, "Failed to attach struct_ops: %s (%d)\n", strerror(-err), err);
         goto cleanup;
     }
 
-    printf("Successfully loaded and attached BPF adaptive_simple policy!\n");
+    printf("Successfully loaded and attached BPF adaptive_tree_iter policy!\n");
     printf("Monitoring PCIe traffic and updating threshold every second...\n");
     printf("Monitor dmesg for BPF debug output.\n");
     printf("\nPress Ctrl-C to exit and detach the policy...\n\n");
@@ -121,7 +133,7 @@ int main(int argc, char **argv) {
     bpf_link__destroy(link);
 
 cleanup:
-    prefetch_adaptive_simple_bpf__destroy(skel);
+    prefetch_adaptive_tree_iter_bpf__destroy(skel);
 
     /* Cleanup NVML */
     if (nvml_device) {

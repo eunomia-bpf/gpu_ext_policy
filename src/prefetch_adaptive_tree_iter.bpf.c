@@ -70,8 +70,8 @@ int BPF_PROG(uvm_prefetch_on_tree_iter,
 
     /* Apply adaptive threshold: counter * 100 > subregion_pages * threshold */
     if (counter * 100 > subregion_pages * threshold) {
-        bpf_printk("Adaptive: counter=%u/%u (threshold=%u%%), selecting [%u,%u)\n",
-                   counter, subregion_pages, threshold, first, outer);
+        // bpf_printk("Adaptive: counter=%u/%u (threshold=%u%%), selecting [%u,%u)\n",
+                //    counter, subregion_pages, threshold, first, outer);
 
         /* Update prefetch_region via kfunc */
         bpf_uvm_set_va_block_region(prefetch_region, first, outer);
@@ -91,7 +91,7 @@ int BPF_PROG(uvm_bpf_test_trigger_kfunc, const char *buf, int len)
 
 /* Define the struct_ops map */
 SEC(".struct_ops")
-struct uvm_gpu_ext uvm_ops_adaptive_simple = {
+struct uvm_gpu_ext uvm_ops_adaptive_tree_iter = {
     .uvm_bpf_test_trigger_kfunc = (void *)uvm_bpf_test_trigger_kfunc,
     .uvm_prefetch_before_compute = (void *)uvm_prefetch_before_compute,
     .uvm_prefetch_on_tree_iter = (void *)uvm_prefetch_on_tree_iter,
