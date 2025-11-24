@@ -11,6 +11,7 @@
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include "chunk_trace.skel.h"
+#include "chunk_trace_event.h"
 
 static volatile sig_atomic_t exiting = 0;
 
@@ -23,17 +24,10 @@ static const char *hook_names[] = {
     [4] = "EVICTION_PREPARE",
 };
 
-// Event structure (must match BPF side)
-struct hook_event {
-    __u64 timestamp_ns;
-    __u32 hook_type;
-    __u32 cpu;
-    __u64 chunk_addr;
-    __u64 list_addr;
-};
-
 // Statistics
 static __u64 stats[5] = {0};
+static __u64 va_block_count = 0;  // Count events with VA block info
+static __u64 va_block_null = 0;   // Count events without VA block info
 static __u64 start_time_ns = 0;
 
 static void sig_handler(int sig)
@@ -60,21 +54,42 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 
     const char *hook_name = (e->hook_type < 5) ? hook_names[e->hook_type] : "UNKNOWN";
 
+    // CSV output format:
+    // time_ms,hook_type,cpu,chunk_addr,list_addr,va_block,va_start,va_end,va_page_index
+
     if (e->hook_type == 4) {
         // EVICTION_PREPARE: chunk_addr is used_list, list_addr is unused_list
-        printf("%-10llu %-30s %-18s used=0x%llx unused=0x%llx\n",
+        printf("%llu,%s,%u,0x%llx,0x%llx,,,,%u\n",
                elapsed_ms,
                hook_name,
-               "---",
-               e->chunk_addr,
-               e->list_addr);
+               e->cpu,
+               e->chunk_addr,  // used_list
+               e->list_addr,   // unused_list
+               e->va_page_index);
     } else {
         // Regular hooks
-        printf("%-10llu %-30s 0x%-16llx 0x%llx\n",
-               elapsed_ms,
-               hook_name,
-               e->chunk_addr,
-               e->list_addr);
+        if (e->va_block != 0) {
+            printf("%llu,%s,%u,0x%llx,0x%llx,0x%llx,0x%llx,0x%llx,%u\n",
+                   elapsed_ms,
+                   hook_name,
+                   e->cpu,
+                   e->chunk_addr,
+                   e->list_addr,
+                   e->va_block,
+                   e->va_start,
+                   e->va_end,
+                   e->va_page_index);
+            va_block_count++;
+        } else {
+            printf("%llu,%s,%u,0x%llx,0x%llx,,,,%u\n",
+                   elapsed_ms,
+                   hook_name,
+                   e->cpu,
+                   e->chunk_addr,
+                   e->list_addr,
+                   e->va_page_index);
+            va_block_null++;
+        }
     }
 
     return 0;
@@ -111,6 +126,25 @@ static void print_stats(struct chunk_trace_bpf *skel)
 
     if (stats[4] > 0) {
         printf("\n⚠️  Dropped events:          %8llu\n", stats[4]);
+    }
+
+    printf("================================================================================\n");
+    printf("VA BLOCK TRACKING\n");
+    printf("================================================================================\n");
+    printf("With VA block:            %8llu\n", va_block_count);
+    printf("Without VA block (NULL):  %8llu\n", va_block_null);
+
+    if (va_block_count + va_block_null > 0) {
+        printf("Coverage:                 %7.1f%%\n",
+               va_block_count * 100.0 / (va_block_count + va_block_null));
+    }
+
+    if (va_block_count == 0 && va_block_null > 0) {
+        printf("\n⚠️  WARNING: No VA blocks detected!\n");
+        printf("   This likely means the struct offset is incorrect.\n");
+        printf("   Expected offset to va_block: ~40-48 bytes from chunk base\n");
+    } else if (va_block_count > 0) {
+        printf("\n✓ VA blocks successfully tracked!\n");
     }
 
     printf("================================================================================\n");
@@ -158,8 +192,8 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    printf("Tracing BPF hooks... Hit Ctrl-C to end.\n");
-    printf("%-10s %-30s %-18s %-15s\n", "TIME(ms)", "HOOK", "CHUNK_ADDR", "LIST_ADDR");
+    // Print CSV header
+    printf("time_ms,hook_type,cpu,chunk_addr,list_addr,va_block,va_start,va_end,va_page_index\n");
 
     // Process events
     while (!exiting) {

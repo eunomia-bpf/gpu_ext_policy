@@ -26,6 +26,18 @@ typedef struct uvm_perf_prefetch_bitmap_tree {
 
 /* Forward declarations - opaque types for BPF */
 typedef struct uvm_pmm_gpu_struct uvm_pmm_gpu_t;
+
+/* uvm_va_block_struct - minimal definition for accessing start/end addresses */
+struct uvm_va_block_struct {
+	/* We don't know the exact internal layout, but based on empirical testing:
+	 * - start address is at offset ~24
+	 * - end address is at offset ~32
+	 * Using CO-RE, BPF will relocate these offsets automatically */
+	char _padding[24];
+	unsigned long long start;  // VA block start address
+	unsigned long long end;    // VA block end address
+};
+
 typedef struct uvm_va_block_struct uvm_va_block_t;
 
 /* Full definition of uvm_gpu_chunk_struct - needed to access chunk->list field */
@@ -44,7 +56,7 @@ struct uvm_gpu_chunk_struct {
 		unsigned int gpu_index : 7;
 	};
 	struct list_head list;  /* This is what we need to access */
-	void *va_block;
+	uvm_va_block_t *va_block;  /* VA block using this chunk */
 	void *parent;
 	void *suballoc;
 };
