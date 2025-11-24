@@ -26,16 +26,15 @@ struct {
 // Statistics counters
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
-    __uint(max_entries, 5);
+    __uint(max_entries, 4);
     __type(key, u32);
     __type(value, u64);
 } stats SEC(".maps");
 
 #define STAT_ACTIVATE 0
 #define STAT_POPULATE 1
-#define STAT_DEPOPULATE 2
-#define STAT_EVICTION_PREPARE 3
-#define STAT_DROPPED 4
+#define STAT_EVICTION_PREPARE 2
+#define STAT_DROPPED 3
 
 static __always_inline void inc_stat(u32 key)
 {
@@ -111,16 +110,7 @@ int BPF_KPROBE(trace_populate, void *pmm, void *chunk, void *list)
     return 0;
 }
 
-/* Hook 3: Depopulate (chunk loses all resident pages) */
-SEC("kprobe/uvm_bpf_call_pmm_chunk_depopulate")
-int BPF_KPROBE(trace_depopulate, void *pmm, void *chunk, void *list)
-{
-    inc_stat(STAT_DEPOPULATE);
-    submit_event(HOOK_DEPOPULATE, (u64)chunk, (u64)list);
-    return 0;
-}
-
-/* Hook 4: Eviction prepare (before selecting chunk to evict) */
+/* Hook 3: Eviction prepare (before selecting chunk to evict) */
 SEC("kprobe/uvm_bpf_call_pmm_eviction_prepare")
 int BPF_KPROBE(trace_eviction_prepare, void *pmm, void *used_list, void *unused_list)
 {

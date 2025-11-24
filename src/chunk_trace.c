@@ -20,12 +20,11 @@ static const char *hook_names[] = {
     [0] = "UNKNOWN",
     [1] = "ACTIVATE",
     [2] = "POPULATE",
-    [3] = "DEPOPULATE",
-    [4] = "EVICTION_PREPARE",
+    [3] = "EVICTION_PREPARE",
 };
 
 // Statistics
-static __u64 stats[5] = {0};
+static __u64 stats[4] = {0};
 static __u64 va_block_count = 0;  // Count events with VA block info
 static __u64 va_block_null = 0;   // Count events without VA block info
 static __u64 start_time_ns = 0;
@@ -52,7 +51,7 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 
     elapsed_ms = (e->timestamp_ns - start_time_ns) / 1000000;
 
-    const char *hook_name = (e->hook_type < 5) ? hook_names[e->hook_type] : "UNKNOWN";
+    const char *hook_name = (e->hook_type < 4) ? hook_names[e->hook_type] : "UNKNOWN";
 
     // CSV output format:
     // time_ms,hook_type,cpu,chunk_addr,list_addr,va_block,va_start,va_end,va_page_index
@@ -110,7 +109,7 @@ static void print_stats(struct chunk_trace_bpf *skel)
     printf("--------------------------------------------------------------------------------\n");
 
     // Read all stats
-    for (key = 0; key < 5; key++) {
+    for (key = 0; key < 4; key++) {
         if (bpf_map_lookup_elem(stats_fd, &key, &val) == 0) {
             stats[key] = val;
         }
@@ -118,14 +117,13 @@ static void print_stats(struct chunk_trace_bpf *skel)
 
     printf("ACTIVATE                  %8llu\n", stats[0]);
     printf("POPULATE                  %8llu\n", stats[1]);
-    printf("DEPOPULATE                %8llu\n", stats[2]);
-    printf("EVICTION_PREPARE          %8llu\n", stats[3]);
+    printf("EVICTION_PREPARE          %8llu\n", stats[2]);
     printf("--------------------------------------------------------------------------------\n");
     printf("TOTAL                     %8llu\n",
-           stats[0] + stats[1] + stats[2] + stats[3]);
+           stats[0] + stats[1] + stats[2]);
 
-    if (stats[4] > 0) {
-        printf("\n⚠️  Dropped events:          %8llu\n", stats[4]);
+    if (stats[3] > 0) {
+        printf("\n⚠️  Dropped events:          %8llu\n", stats[3]);
     }
 
     printf("================================================================================\n");
