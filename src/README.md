@@ -445,57 +445,6 @@ int BPF_PROG(uvm_pmm_chunk_used, ...) {
 3. **正确的victim选择**: FIFO自然选择最不需要的chunks
 4. **性能提升**: 相比LRU减少10-20%的list操作开销
 
-#### 3. **LFU (Least Frequently Used)** （适合特定workload）
-**状态**: 待实现
-
-**核心思想**: 基于访问频率而不是访问时间来决定eviction
-
-**伪代码**:
-```c
-// BPF map记录访问频率
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, u64);      // chunk address
-    __type(value, u32);    // access count
-} chunk_freq SEC(".maps");
-
-SEC("struct_ops/uvm_pmm_chunk_used")
-int BPF_PROG(uvm_pmm_chunk_used, ...) {
-    u64 key = (u64)chunk;
-    u32 *count = bpf_map_lookup_elem(&chunk_freq, &key);
-
-    if (count) {
-        (*count)++;
-
-        // 根据频率调整位置
-        // 注意：UVM从HEAD开始evict，所以 tail=保护，head=优先evict
-        if (*count > 100) {
-            // 高频：移到TAIL保护
-            bpf_uvm_pmm_chunk_move_tail(chunk, list);
-        } else if (*count > 10) {
-            // 中频：也移到TAIL，但优先级低于高频
-            bpf_uvm_pmm_chunk_move_tail(chunk, list);
-        }
-        // 低频：不移动，留在HEAD附近，容易被evict
-    } else {
-        u32 initial_count = 1;
-        bpf_map_update_elem(&chunk_freq, &key, &initial_count, BPF_ANY);
-    }
-
-    return 0;
-}
-```
-
-**适用场景**:
-- ✅ 有明显的"热数据"（少数数据被频繁访问）
-- ✅ Random access with hotspots
-- ❌ **不适合sequential streaming**（所有数据访问频率相同）
-
-**为什么对seq_stream无效**:
-- Sequential access意味着所有chunk访问频率≈1
-- 没有"热点"可以保护
-- LFU退化为FIFO
-
 ---
 
 ## Prefetch策略
