@@ -404,9 +404,18 @@ return 0;  // 跳过这个区域
 **文件**: 内核默认实现
 
 **工作原理**:
-- `chunk_activate`: 将chunk加到list尾部
-- `chunk_used`: 将chunk移到list头部（最近使用）
-- `eviction_prepare`: List尾部的chunks优先被evict
+```
+List结构（UVM从HEAD开始evict）:
+┌────────────────────────────────────────┐
+│  HEAD (evict from here)    TAIL (safe) │
+│  ↓                         ↓            │
+│  [老数据] → [中等] → ... → [新数据]     │
+│  list_first_entry() ←─ EVICT           │
+└────────────────────────────────────────┘
+```
+- `chunk_activate`: 将chunk加到list**尾部**（tail = 新数据，暂时安全）
+- `chunk_used`: 将chunk移到list**尾部**（tail = 最近使用，保护）
+- `eviction_prepare`: List**头部**（HEAD）的chunks优先被evict
 
 **适用场景**:
 - ✅ 有时间局部性（temporal locality）
@@ -459,14 +468,15 @@ int BPF_PROG(uvm_pmm_chunk_used, ...) {
         (*count)++;
 
         // 根据频率调整位置
+        // 注意：UVM从HEAD开始evict，所以 tail=保护，head=优先evict
         if (*count > 100) {
-            // 高频：保护
-            bpf_list_move_head(&chunk->list, list);
+            // 高频：移到TAIL保护
+            bpf_uvm_pmm_chunk_move_tail(chunk, list);
         } else if (*count > 10) {
-            // 中频：正常LRU
-            bpf_list_move(&chunk->list, list, NORMAL_POSITION);
+            // 中频：也移到TAIL，但优先级低于高频
+            bpf_uvm_pmm_chunk_move_tail(chunk, list);
         }
-        // 低频：不移动，容易被evict
+        // 低频：不移动，留在HEAD附近，容易被evict
     } else {
         u32 initial_count = 1;
         bpf_map_update_elem(&chunk_freq, &key, &initial_count, BPF_ANY);
