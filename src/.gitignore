@@ -15,4 +15,5 @@ prefetch_adaptive_sequential
 cleanup_struct_ops_tool
 eviction_fifo
 eviction_lfu
+eviction_mru
 chunk_trace
