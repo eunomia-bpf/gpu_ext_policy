@@ -1,26 +1,69 @@
 #ifndef __UVM_TYPES_H__
 #define __UVM_TYPES_H__
 
+
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute push (__attribute__((preserve_access_index)), apply_to = record)
+#endif
+
+#ifndef __ksym
+#define __ksym __attribute__((section(".ksyms")))
+#endif
+
+#ifndef __weak
+#define __weak __attribute__((weak))
+#endif
+
+#ifndef __bpf_fastcall
+#if __has_attribute(bpf_fastcall)
+#define __bpf_fastcall __attribute__((bpf_fastcall))
+#else
+#define __bpf_fastcall
+#endif
+#endif
+
 /* Extract only UVM-specific types from nvidia-uvm.ko BTF */
 
+typedef unsigned char NvU8;
 typedef short unsigned int NvU16;
+typedef unsigned int NvU32;
+typedef unsigned long long NvU64;
 typedef NvU16 uvm_page_index_t;
 
+/*
+ * uvm_va_block_region_t - VA block region descriptor
+ * Used to specify a range of pages within a VA block
+ */
 typedef struct {
-	uvm_page_index_t first;
-	uvm_page_index_t outer;
+	uvm_page_index_t first;   /* First page index (inclusive) */
+	uvm_page_index_t outer;   /* Last page index + 1 (exclusive) */
 } uvm_va_block_region_t;
 
+/*
+ * uvm_page_mask_t - Bitmask for 512 pages (2MB VA block)
+ */
 typedef struct {
-	long unsigned int bitmap[8];
+	unsigned long bitmap[8];  /* 8 * 64 = 512 bits */
 } uvm_page_mask_t;
 
+/*
+ * uvm_perf_prefetch_bitmap_tree_t - Prefetch decision tree
+ * Used to track page access patterns for prefetch decisions
+ */
 typedef struct uvm_perf_prefetch_bitmap_tree {
-	uvm_page_mask_t pages;
-	uvm_page_index_t offset;
-	NvU16 leaf_count;
-	unsigned char level_count;
+	uvm_page_mask_t pages;     /* Bitmap of accessed pages */
+	uvm_page_index_t offset;   /* Offset within VA block */
+	NvU16 leaf_count;          /* Number of leaf nodes */
+	NvU8 level_count;          /* Tree depth */
 } uvm_perf_prefetch_bitmap_tree_t;
+
+/*
+ * uvm_perf_prefetch_bitmap_tree_iter_t - Tree iterator
+ */
+typedef struct {
+	signed char level_idx;
+	uvm_page_index_t node_idx;
+} uvm_perf_prefetch_bitmap_tree_iter_t;
 
 /* PMM (Physical Memory Manager) types for eviction policy */
 
@@ -64,5 +107,9 @@ struct uvm_gpu_chunk_struct {
 typedef struct uvm_gpu_chunk_struct uvm_gpu_chunk_t;
 
 /* Note: list_head is already defined in vmlinux.h, no need to redefine it */
+
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute pop
+#endif
 
 #endif /* __UVM_TYPES_H__ */

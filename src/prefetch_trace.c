@@ -15,22 +15,6 @@
 
 static volatile sig_atomic_t exiting = 0;
 
-// Hook type names
-static const char *hook_names[] = {
-    [0] = "UNKNOWN",
-    [1] = "BEFORE_COMPUTE",
-    [2] = "ON_TREE_ITER",
-    [3] = "BEFORE_COMPUTE_RET",
-    [4] = "ON_TREE_ITER_RET",
-};
-
-// Action names for return values
-static const char *action_names[] = {
-    [0] = "DEFAULT",
-    [1] = "BYPASS",
-    [2] = "ENTER_LOOP",
-};
-
 static __u64 start_time_ns = 0;
 
 static void print_stats(struct prefetch_trace_bpf *skel)
@@ -38,10 +22,10 @@ static void print_stats(struct prefetch_trace_bpf *skel)
     int stats_fd = bpf_map__fd(skel->maps.stats);
     __u32 key;
     __u64 val;
-    __u64 stats[4] = {0};
+    __u64 stats[3] = {0};
 
     // Read all stats
-    for (key = 0; key < 4; key++) {
+    for (key = 0; key < 3; key++) {
         if (bpf_map_lookup_elem(stats_fd, &key, &val) == 0) {
             stats[key] = val;
         }
@@ -49,7 +33,7 @@ static void print_stats(struct prefetch_trace_bpf *skel)
 
     fprintf(stderr, "\n");
     fprintf(stderr, "================================================================================\n");
-    fprintf(stderr, "PREFETCH HOOK SUMMARY\n");
+    fprintf(stderr, "PREFETCH TRACE SUMMARY\n");
     fprintf(stderr, "================================================================================\n");
     fprintf(stderr, "BEFORE_COMPUTE            %8llu\n", stats[0]);
     fprintf(stderr, "ON_TREE_ITER              %8llu\n", stats[1]);
@@ -76,49 +60,18 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 
     elapsed_ms = (e->timestamp_ns - start_time_ns) / 1000000;
 
-    const char *hook_name = (e->hook_type <= 4) ? hook_names[e->hook_type] : "UNKNOWN";
-
     // CSV output format:
-    // time_ms,hook_type,cpu,page_index,max_first,max_outer,result_first,result_outer,
-    // current_first,current_outer,counter,selected
-
-    if (e->hook_type == HOOK_PREFETCH_BEFORE_COMPUTE) {
-        // Entry event
-        printf("%llu,%s,%u,%u,%u,%u,,,,,\n",
-               elapsed_ms,
-               hook_name,
-               e->cpu,
-               e->page_index,
-               e->max_region_first,
-               e->max_region_outer);
-    } else if (e->hook_type == HOOK_PREFETCH_BEFORE_COMPUTE_RET) {
-        // Return event
-        const char *action = (e->selected <= 2) ? action_names[e->selected] : "UNKNOWN";
-        printf("%llu,%s,%u,,,,,,,,,%s\n",
-               elapsed_ms,
-               hook_name,
-               e->cpu,
-               action);
-    } else if (e->hook_type == HOOK_PREFETCH_ON_TREE_ITER) {
-        // Entry event
-        printf("%llu,%s,%u,,%u,%u,,%u,%u,%u,\n",
-               elapsed_ms,
-               hook_name,
-               e->cpu,
-               e->max_region_first,
-               e->max_region_outer,
-               e->current_region_first,
-               e->current_region_outer,
-               e->counter);
-    } else if (e->hook_type == HOOK_PREFETCH_ON_TREE_ITER_RET) {
-        // Return event
-        printf("%llu,%s,%u,,,,,,,,%u,%s\n",
-               elapsed_ms,
-               hook_name,
-               e->cpu,
-               e->counter,
-               e->selected ? "SELECTED" : "SKIPPED");
-    }
+    // time_ms,cpu,page_index,max_first,max_outer,tree_offset,leaf_count,level_count,pages_accessed
+    printf("%llu,%u,%u,%u,%u,%u,%u,%u,%u\n",
+           elapsed_ms,
+           e->cpu,
+           e->page_index,
+           e->max_region_first,
+           e->max_region_outer,
+           e->tree_offset,
+           e->tree_leaf_count,
+           e->tree_level_count,
+           e->pages_accessed);
 
     return 0;
 }
@@ -166,7 +119,7 @@ int main(int argc, char **argv)
     signal(SIGTERM, sig_handler);
 
     // Print CSV header
-    printf("time_ms,hook_type,cpu,page_index,max_first,max_outer,result_first,result_outer,current_first,current_outer,counter,selected\n");
+    printf("time_ms,cpu,page_index,max_first,max_outer,tree_offset,leaf_count,level_count,pages_accessed\n");
 
     fprintf(stderr, "Tracing prefetch hooks... Press Ctrl-C to stop.\n");
 
