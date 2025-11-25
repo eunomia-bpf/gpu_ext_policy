@@ -22,10 +22,10 @@ static void print_stats(struct prefetch_trace_bpf *skel)
     int stats_fd = bpf_map__fd(skel->maps.stats);
     __u32 key;
     __u64 val;
-    __u64 stats[3] = {0};
+    __u64 stats[4] = {0};
 
     // Read all stats
-    for (key = 0; key < 3; key++) {
+    for (key = 0; key < 4; key++) {
         if (bpf_map_lookup_elem(stats_fd, &key, &val) == 0) {
             stats[key] = val;
         }
@@ -35,12 +35,13 @@ static void print_stats(struct prefetch_trace_bpf *skel)
     fprintf(stderr, "================================================================================\n");
     fprintf(stderr, "PREFETCH TRACE SUMMARY\n");
     fprintf(stderr, "================================================================================\n");
-    fprintf(stderr, "BEFORE_COMPUTE            %8llu\n", stats[0]);
-    fprintf(stderr, "ON_TREE_ITER              %8llu\n", stats[1]);
+    fprintf(stderr, "GET_HINT_VA_BLOCK         %8llu\n", stats[0]);
+    fprintf(stderr, "BEFORE_COMPUTE            %8llu\n", stats[1]);
+    fprintf(stderr, "ON_TREE_ITER              %8llu\n", stats[2]);
     fprintf(stderr, "--------------------------------------------------------------------------------\n");
-    fprintf(stderr, "TOTAL                     %8llu\n", stats[0] + stats[1]);
-    if (stats[2] > 0) {
-        fprintf(stderr, "DROPPED                   %8llu\n", stats[2]);
+    fprintf(stderr, "TOTAL                     %8llu\n", stats[0] + stats[1] + stats[2]);
+    if (stats[3] > 0) {
+        fprintf(stderr, "DROPPED                   %8llu\n", stats[3]);
     }
     fprintf(stderr, "================================================================================\n");
 }
@@ -54,18 +55,40 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 {
     const struct prefetch_event *e = data;
     __u64 elapsed_ms;
+    const char *hook_name;
 
     if (start_time_ns == 0)
         start_time_ns = e->timestamp_ns;
 
     elapsed_ms = (e->timestamp_ns - start_time_ns) / 1000000;
 
+    // Determine hook type name
+    switch (e->hook_type) {
+    case HOOK_PREFETCH_GET_HINT:
+        hook_name = "GET_HINT";
+        break;
+    case HOOK_PREFETCH_BEFORE_COMPUTE:
+        hook_name = "BEFORE_COMPUTE";
+        break;
+    case HOOK_PREFETCH_ON_TREE_ITER:
+        hook_name = "ON_TREE_ITER";
+        break;
+    default:
+        hook_name = "UNKNOWN";
+        break;
+    }
+
     // CSV output format:
-    // time_ms,cpu,page_index,max_first,max_outer,tree_offset,leaf_count,level_count,pages_accessed
-    printf("%llu,%u,%u,%u,%u,%u,%u,%u,%u\n",
-           elapsed_ms,
+    // time_ms,cpu,hook,va_start,va_end,page_index,faulted_first,faulted_outer,max_first,max_outer,tree_offset,leaf_count,level_count,pages_accessed
+    printf("%llu,%u,%s,0x%llx,0x%llx,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+           (unsigned long long)elapsed_ms,
            e->cpu,
+           hook_name,
+           (unsigned long long)e->va_start,
+           (unsigned long long)e->va_end,
            e->page_index,
+           e->faulted_first,
+           e->faulted_outer,
            e->max_region_first,
            e->max_region_outer,
            e->tree_offset,
@@ -119,9 +142,11 @@ int main(int argc, char **argv)
     signal(SIGTERM, sig_handler);
 
     // Print CSV header
-    printf("time_ms,cpu,page_index,max_first,max_outer,tree_offset,leaf_count,level_count,pages_accessed\n");
+    printf("time_ms,cpu,hook,va_start,va_end,page_index,faulted_first,faulted_outer,max_first,max_outer,tree_offset,leaf_count,level_count,pages_accessed\n");
 
     fprintf(stderr, "Tracing prefetch hooks... Press Ctrl-C to stop.\n");
+    fprintf(stderr, "  - uvm_perf_prefetch_get_hint_va_block (GET_HINT) - has VA block info\n");
+    fprintf(stderr, "  - uvm_bpf_call_before_compute_prefetch (BEFORE_COMPUTE) - no VA block info\n");
 
     // Process events
     while (!exiting) {

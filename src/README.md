@@ -16,6 +16,9 @@ python /home/yunwei37/workspace/gpu/co-processor-demo/gpu_ext_policy/scripts/vis
 - [Eviction策略](#eviction策略)
 - [Prefetch策略](#prefetch策略)
 - [如何使用](#如何使用)
+- [Trace工具](#trace工具)
+  - [chunk_trace](#chunk_trace---chunk生命周期追踪)
+  - [prefetch_trace](#prefetch_trace---prefetch决策追踪)
 
 ---
 
@@ -681,11 +684,152 @@ sudo ./chunk_trace -d 10 -o /tmp/trace.csv
 
 ---
 
+## Trace工具
+
+本目录包含两个基于kprobe的BPF trace工具，用于分析UVM内存管理行为。
+
+### chunk_trace - Chunk生命周期追踪
+
+追踪GPU内存chunk的生命周期事件（activate、used、eviction_prepare），包括VA block信息。
+
+**编译和运行**:
+```bash
+make chunk_trace
+sudo timeout 30 ./chunk_trace > /tmp/trace.csv
+```
+
+**输出格式（CSV）**:
+```
+time_ms,cpu,hook,chunk_addr,list_addr,va_block,va_start,va_end,va_page_index
+```
+
+**字段说明**:
+| 字段 | 说明 |
+|------|------|
+| `time_ms` | 从第一个事件起的毫秒时间 |
+| `cpu` | 执行hook的CPU核心 |
+| `hook` | 事件类型：ACTIVATE/USED/EVICTION_PREPARE |
+| `chunk_addr` | 物理chunk地址 |
+| `list_addr` | Evictable list地址 |
+| `va_block` | VA block指针 |
+| `va_start` | VA block起始虚拟地址 |
+| `va_end` | VA block结束虚拟地址 |
+| `va_page_index` | Chunk在VA block内的页索引 |
+
+**统计信息**（输出到stderr）:
+```
+================================================================================
+CHUNK TRACE SUMMARY
+================================================================================
+ACTIVATE                    12345
+USED                        67890
+EVICTION_PREPARE               50
+--------------------------------------------------------------------------------
+TOTAL                       80285
+================================================================================
+```
+
+**可视化分析**:
+```bash
+python /home/yunwei37/workspace/gpu/co-processor-demo/gpu_ext_policy/scripts/visualize_eviction.py /tmp/trace.csv
+```
+
+---
+
+### prefetch_trace - Prefetch决策追踪
+
+追踪UVM prefetch计算过程，了解预取决策的输入参数。
+
+**编译和运行**:
+```bash
+make prefetch_trace
+sudo timeout 5 ./prefetch_trace > /tmp/prefetch.csv 2> /tmp/prefetch_stats.txt
+```
+
+**输出格式（CSV）**:
+```
+time_ms,cpu,page_index,max_first,max_outer,tree_offset,leaf_count,level_count,pages_accessed
+```
+
+**字段说明**:
+| 字段 | 说明 |
+|------|------|
+| `time_ms` | 从第一个事件起的毫秒时间 |
+| `cpu` | 执行hook的CPU核心 |
+| `page_index` | 触发prefetch的页面索引（0-511，在VA block内的偏移） |
+| `max_first` | 最大prefetch区域的起始页（通常为0） |
+| `max_outer` | 最大prefetch区域的结束页（通常为512，表示整个2MB VA block） |
+| `tree_offset` | bitmap_tree在VA block内的偏移 |
+| `leaf_count` | bitmap_tree的叶子节点数 |
+| `level_count` | bitmap_tree的层级深度 |
+| `pages_accessed` | 当前VA block中已访问的页面数（bitmap popcount） |
+
+**关键概念**:
+
+1. **page_index与max_region的关系**:
+   - `max_region = {first:0, outer:512}` 表示整个2MB VA block（512个4KB页）
+   - `page_index` 是触发prefetch计算的fault页面
+   - Prefetch算法以`page_index`为中心，在`max_region`范围内计算预取区域
+
+2. **虚拟地址计算**:
+   - 实际虚拟地址 = `va_block->start + page_index * 4096`
+   - **注意**: `prefetch_trace`无法获取`va_block`指针，因此无法直接输出虚拟地址
+   - 如需虚拟地址，请使用`chunk_trace`或将两者trace关联分析
+
+3. **pages_accessed的意义**:
+   - 表示在当前VA block中已经fault过的页面数
+   - 可用于判断访问密度和预取策略效果
+
+**统计信息**（输出到stderr）:
+```
+================================================================================
+PREFETCH TRACE SUMMARY
+================================================================================
+BEFORE_COMPUTE              329276
+ON_TREE_ITER                     0
+--------------------------------------------------------------------------------
+TOTAL                       329276
+================================================================================
+```
+
+**与chunk_trace配合使用**:
+
+要获得完整的虚拟地址信息，可以同时运行两个trace工具：
+
+```bash
+# 终端1：运行chunk_trace
+sudo timeout 30 ./chunk_trace > /tmp/chunk_trace.csv 2>&1
+
+# 终端2：运行prefetch_trace
+sudo timeout 30 ./prefetch_trace > /tmp/prefetch_trace.csv 2>&1
+
+# 按时间戳关联分析
+# chunk_trace提供va_start，prefetch_trace提供page_index
+# 实际地址 = va_start + page_index * 4096
+```
+
+---
+
+### Trace工具对比
+
+| 特性 | chunk_trace | prefetch_trace |
+|------|-------------|----------------|
+| **追踪对象** | Chunk生命周期（eviction相关） | Prefetch决策过程 |
+| **主要Hook** | activate, used, eviction_prepare | before_compute |
+| **虚拟地址** | ✅ 可获取（va_start/va_end） | ❌ 无法直接获取 |
+| **物理地址** | ✅ chunk_addr | ❌ 不涉及 |
+| **页面索引** | ✅ va_page_index | ✅ page_index |
+| **访问模式** | 通过USED事件分析 | 通过pages_accessed分析 |
+| **典型用途** | 分析eviction策略效果 | 分析prefetch策略输入 |
+
+---
+
 ## 参考资料
 
 - [Policy Design Guide](../docs/POLICY_DESIGN_GUIDE.md) - 详细的策略设计指南
 - [BPF List Operations](../../docs/lru/BPF_LIST_OPERATIONS_GUIDE.md) - BPF链表操作
 - [UVM Kernel Parameters](../../memory/UVM_KERNEL_PARAMETERS.md) - UVM内核参数
+- [Workload Analysis](../docs/WORKLOAD_ANALYSIS.md) - 工作负载分析文档
 
 ---
 
