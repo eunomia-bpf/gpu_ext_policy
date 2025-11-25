@@ -17,3 +17,4 @@ eviction_fifo
 eviction_lfu
 eviction_mru
 chunk_trace
+prefetch_trace
