@@ -18,3 +18,4 @@ eviction_lfu
 eviction_mru
 chunk_trace
 prefetch_trace
+gpu_sched_trace
