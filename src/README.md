@@ -1,5 +1,11 @@
 # GPU Memory Management BPF Policies
 
+Pages: 4kb
+VA block 2MB 512 Pages
+Chunks 2MB
+
+
+
 这个目录包含用于NVIDIA UVM (Unified Virtual Memory) 的BPF struct_ops策略实现，用于优化GPU内存管理。
 
 
