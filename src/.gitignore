@@ -19,3 +19,5 @@ eviction_mru
 chunk_trace
 prefetch_trace
 gpu_sched_trace
+gpu_preempt_ctrl
+test_preempt_ctrl

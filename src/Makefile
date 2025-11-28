@@ -21,7 +21,7 @@ INCLUDES := -I$(OUTPUT) -I../libbpf/include/uapi -I$(dir $(VMLINUX)) -I/usr/loca
 CFLAGS := -g -Wall
 ALL_LDFLAGS := $(LDFLAGS) $(EXTRA_LDFLAGS)
 
-BPF_APPS = struct_ops prefetch_always_max prefetch_none prefetch_adaptive_tree_iter prefetch_adaptive_sequential eviction_fifo eviction_lfu eviction_mru chunk_trace prefetch_trace gpu_sched_trace # BPF apps that need skeletons
+BPF_APPS = struct_ops prefetch_always_max prefetch_none prefetch_adaptive_tree_iter prefetch_adaptive_sequential eviction_fifo eviction_lfu eviction_mru chunk_trace prefetch_trace gpu_sched_trace gpu_preempt_ctrl # BPF apps that need skeletons
 TOOL_APPS = cleanup_struct_ops_tool # Pure userspace tools
 APPS = $(BPF_APPS) $(TOOL_APPS) # minimal minimal_legacy uprobe kprobe fentry usdt sockfilter tc ksyscall
 
@@ -136,8 +136,11 @@ $(BZS_APPS): $(LIBBLAZESYM_OBJ)
 # Apps that need NVML
 NVML_APPS = prefetch_adaptive_tree_iter prefetch_adaptive_sequential
 
-# Build application binary (exclude NVML apps from generic rule)
-$(filter-out $(NVML_APPS),$(APPS)): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
+# Apps that need pthread
+PTHREAD_APPS = gpu_preempt_ctrl
+
+# Build application binary (exclude NVML and PTHREAD apps from generic rule)
+$(filter-out $(NVML_APPS) $(PTHREAD_APPS),$(APPS)): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
 	$(call msg,BINARY,$@)
 	$(Q)$(CC) $(CFLAGS) $^ $(ALL_LDFLAGS) -lelf -lz -o $@
 
@@ -145,6 +148,11 @@ $(filter-out $(NVML_APPS),$(APPS)): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
 $(NVML_APPS): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
 	$(call msg,BINARY,$@)
 	$(Q)$(CC) $(CFLAGS) $^ $(ALL_LDFLAGS) -lelf -lz -L/usr/local/cuda/lib64/stubs -lnvidia-ml -o $@
+
+# Special rule for apps with pthread
+$(PTHREAD_APPS): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
+	$(call msg,BINARY,$@)
+	$(Q)$(CC) $(CFLAGS) $^ $(ALL_LDFLAGS) -lelf -lz -lpthread -o $@
 
 # delete failed targets
 .DELETE_ON_ERROR:
