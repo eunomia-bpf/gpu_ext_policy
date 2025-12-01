@@ -31,6 +31,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <linux/ioctl.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <bpf/libbpf.h>
@@ -38,9 +39,21 @@
 #include "gpu_preempt_ctrl.skel.h"
 #include "gpu_preempt_ctrl_event.h"
 
+/* NVIDIA ioctl constants */
+#define NV_IOCTL_MAGIC      'F'
+#define NV_IOCTL_BASE       200
+#define NV_ESC_IOCTL_XFER_CMD   (NV_IOCTL_BASE + 11)
+
 static volatile bool exiting = false;
 static int verbose = 0;
 static int g_nvidia_fd = -1;
+
+/* nv_ioctl_xfer_t for indirect ioctl */
+typedef struct {
+    uint32_t cmd;
+    uint32_t size;
+    void    *ptr __attribute__((aligned(8)));
+} nv_ioctl_xfer_t;
 
 /* NVOS54_PARAMETERS for RM control ioctl */
 typedef struct {
@@ -48,10 +61,10 @@ typedef struct {
     uint32_t hObject;
     uint32_t cmd;
     uint32_t flags;
-    void    *params;
+    void    *params __attribute__((aligned(8)));
     uint32_t paramsSize;
     uint32_t status;
-} __attribute__((packed, aligned(8))) NVOS54_PARAMETERS;
+} NVOS54_PARAMETERS;
 
 /* NVA06C_CTRL_PREEMPT_PARAMS */
 typedef struct {
@@ -128,6 +141,7 @@ static int rm_control(int fd, uint32_t hClient, uint32_t hObject,
                       uint32_t cmd, void *params, uint32_t paramsSize)
 {
     NVOS54_PARAMETERS ctrl;
+    nv_ioctl_xfer_t xfer;
     int ret;
 
     memset(&ctrl, 0, sizeof(ctrl));
@@ -139,7 +153,14 @@ static int rm_control(int fd, uint32_t hClient, uint32_t hObject,
     ctrl.paramsSize = paramsSize;
     ctrl.status = 0;
 
-    ret = ioctl(fd, NV_ESC_RM_CONTROL, &ctrl);
+    /* Use xfer command to pass large structure */
+    memset(&xfer, 0, sizeof(xfer));
+    xfer.cmd = NV_ESC_RM_CONTROL;
+    xfer.size = sizeof(ctrl);
+    xfer.ptr = &ctrl;
+
+    /* Use _IOWR to encode ioctl command with proper size */
+    ret = ioctl(fd, _IOWR(NV_IOCTL_MAGIC, NV_ESC_IOCTL_XFER_CMD, nv_ioctl_xfer_t), &xfer);
 
     if (ret < 0) {
         return -errno;

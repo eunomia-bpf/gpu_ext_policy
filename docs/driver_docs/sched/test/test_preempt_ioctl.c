@@ -25,21 +25,33 @@
 #include <errno.h>
 #include <time.h>
 #include <signal.h>
+#include <linux/ioctl.h>
 
 #define NV_ESC_RM_CONTROL   0x2A
+#define NV_IOCTL_MAGIC      'F'
+#define NV_IOCTL_BASE       200
+#define NV_ESC_IOCTL_XFER_CMD   (NV_IOCTL_BASE + 11)
+
 #define NVA06C_CTRL_CMD_PREEMPT             0xa06c0105
 #define NVA06C_CTRL_CMD_SET_TIMESLICE       0xa06c0103
 #define NVA06C_CTRL_CMD_SET_INTERLEAVE_LEVEL 0xa06c0107
+
+/* nv_ioctl_xfer_t for indirect ioctl */
+typedef struct {
+    uint32_t cmd;
+    uint32_t size;
+    void    *ptr __attribute__((aligned(8)));
+} nv_ioctl_xfer_t;
 
 typedef struct {
     uint32_t hClient;
     uint32_t hObject;
     uint32_t cmd;
     uint32_t flags;
-    void    *params;
+    void    *params __attribute__((aligned(8)));
     uint32_t paramsSize;
     uint32_t status;
-} __attribute__((packed, aligned(8))) NVOS54_PARAMETERS;
+} NVOS54_PARAMETERS;
 
 typedef struct {
     uint8_t  bWait;
@@ -72,6 +84,7 @@ static int open_nvidia_device(void) {
 static int rm_control(int fd, uint32_t hClient, uint32_t hObject,
                       uint32_t cmd, void *params, uint32_t paramsSize) {
     NVOS54_PARAMETERS ctrl;
+    nv_ioctl_xfer_t xfer;
     int ret;
 
     memset(&ctrl, 0, sizeof(ctrl));
@@ -83,11 +96,20 @@ static int rm_control(int fd, uint32_t hClient, uint32_t hObject,
     ctrl.paramsSize = paramsSize;
     ctrl.status = 0;
 
-    ret = ioctl(fd, NV_ESC_RM_CONTROL, &ctrl);
+    /* Use xfer command to pass large structure */
+    memset(&xfer, 0, sizeof(xfer));
+    xfer.cmd = NV_ESC_RM_CONTROL;
+    xfer.size = sizeof(ctrl);
+    xfer.ptr = &ctrl;
+
+    /* Use _IOWR to encode the ioctl command with proper size */
+    ret = ioctl(fd, _IOWR(NV_IOCTL_MAGIC, NV_ESC_IOCTL_XFER_CMD, nv_ioctl_xfer_t), &xfer);
 
     if (ret < 0) {
+        fprintf(stderr, "    [DEBUG] ioctl failed: ret=%d errno=%d (%s)\n", ret, errno, strerror(errno));
         return -errno;
     }
+    fprintf(stderr, "    [DEBUG] ioctl succeeded: ret=%d ctrl.status=0x%x\n", ret, ctrl.status);
     return ctrl.status;
 }
 

@@ -9,3 +9,15 @@ src/prefetch_none
 src/prefetch_adaptive_simple
 src/prefetch_adaptive_ptr
 src/cleanup_struct_ops_tool
+
+# GPU scheduling tools
+src/gpu_preempt_ctrl
+src/gpu_sched_trace
+
+# Test binaries
+docs/driver_docs/sched/test/test_preempt_ctrl
+docs/driver_docs/sched/test/test_preempt_ioctl
+docs/driver_docs/sched/test/test_preempt_cuda
+
+# External repositories
+docs/driver_docs/sched/GPreempt/
