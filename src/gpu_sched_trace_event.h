@@ -6,7 +6,7 @@
 
 // Hook types for GPU scheduler
 #define HOOK_TASK_INIT      1   // TSG (channel group) creation
-#define HOOK_SCHEDULE       2   // TSG scheduling/enabling
+#define HOOK_BIND           2   // TSG bind to hardware runlist
 #define HOOK_TOKEN_REQUEST  3   // Work submit token request (for sync)
 #define HOOK_TASK_DESTROY   4   // TSG destruction
 
@@ -30,9 +30,9 @@ struct gpu_sched_event {
     __u32 interleave_level; // Interleave level (LOW/MEDIUM/HIGH)
     __u32 runlist_id;       // Runlist ID
 
-    // schedule specific fields
+    // bind specific fields
     __u32 channel_count;    // Number of channels in TSG
-    __u32 allow_schedule;   // Whether scheduling was allowed
+    __u32 allow;            // Whether binding was allowed
 
     // token_request specific fields
     __u32 channel_id;       // Channel ID

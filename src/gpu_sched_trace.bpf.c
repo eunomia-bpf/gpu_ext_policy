@@ -5,8 +5,8 @@
  *
  * Traces the nv_gpu_sched_* hook functions in nvidia.ko:
  * - nv_gpu_sched_task_init:    TSG (channel group) creation
- * - nv_gpu_sched_schedule:     TSG scheduling/enabling
- * - nv_gpu_sched_work_submit:  Work submission to channel
+ * - nv_gpu_sched_bind:         TSG bind to hardware runlist
+ * - nv_gpu_sched_token_request: Work submit token request
  * - nv_gpu_sched_task_destroy: TSG destruction
  *
  * These hooks are implemented in kernel-open/nvidia/nv-gpu-sched-hooks.c
@@ -35,13 +35,13 @@ struct nv_gpu_task_init_ctx {
     u32 interleave_level;
 };
 
-struct nv_gpu_schedule_ctx {
+struct nv_gpu_bind_ctx {
     u64 tsg_id;
     u32 runlist_id;
     u32 channel_count;
     u64 timeslice_us;
     u32 interleave_level;
-    u32 allow_schedule;
+    u32 allow;
 };
 
 struct nv_gpu_token_request_ctx {
@@ -69,7 +69,7 @@ struct {
 } stats SEC(".maps");
 
 #define STAT_TASK_INIT      0
-#define STAT_SCHEDULE       1
+#define STAT_BIND           1
 #define STAT_TOKEN_REQUEST  2
 #define STAT_TASK_DESTROY   3
 #define STAT_DROPPED        4
@@ -125,7 +125,7 @@ int BPF_KPROBE(trace_task_init, struct nv_gpu_task_init_ctx *hook_ctx)
     e->interleave_level = local_ctx.default_interleave;
     e->runlist_id = local_ctx.runlist_id;
     e->channel_count = 0;
-    e->allow_schedule = 0;
+    e->allow = 0;
     e->channel_id = 0;
     e->token = 0;
 
@@ -134,18 +134,19 @@ int BPF_KPROBE(trace_task_init, struct nv_gpu_task_init_ctx *hook_ctx)
 }
 
 /*
- * Hook 2: Schedule - TSG scheduling/enabling
+ * Hook 2: Bind - TSG bind to hardware runlist
  *
- * Called when a TSG is about to be scheduled. This is the admission
- * control point where the scheduler can accept or reject scheduling.
+ * Called when a TSG is being bound to the hardware runlist. This is the
+ * admission control point where the scheduler can accept or reject binding.
+ * This is a ONE-TIME operation, not called on every scheduling decision.
  */
-SEC("kprobe/nv_gpu_sched_schedule")
-int BPF_KPROBE(trace_schedule, struct nv_gpu_schedule_ctx *hook_ctx)
+SEC("kprobe/nv_gpu_sched_bind")
+int BPF_KPROBE(trace_bind, struct nv_gpu_bind_ctx *hook_ctx)
 {
     struct gpu_sched_event *e;
-    struct nv_gpu_schedule_ctx local_ctx;
+    struct nv_gpu_bind_ctx local_ctx;
 
-    inc_stat(STAT_SCHEDULE);
+    inc_stat(STAT_BIND);
 
     e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
     if (!e) {
@@ -169,14 +170,14 @@ int BPF_KPROBE(trace_schedule, struct nv_gpu_schedule_ctx *hook_ctx)
     e->pid = pid_tgid;
     e->tgid = pid_tgid >> 32;
     bpf_get_current_comm(&e->comm, sizeof(e->comm));
-    e->hook_type = HOOK_SCHEDULE;
+    e->hook_type = HOOK_BIND;
     e->tsg_id = read_ok ? local_ctx.tsg_id : 0xFFFFFFFF;
     e->engine_type = 0;
     e->timeslice_us = local_ctx.timeslice_us;
     e->interleave_level = local_ctx.interleave_level;
     e->runlist_id = local_ctx.runlist_id;
     e->channel_count = local_ctx.channel_count;
-    e->allow_schedule = local_ctx.allow_schedule;
+    e->allow = local_ctx.allow;
     e->channel_id = 0;
     e->token = 0;
 
@@ -230,7 +231,7 @@ int BPF_KPROBE(trace_token_request, struct nv_gpu_token_request_ctx *hook_ctx)
     e->interleave_level = 0;
     e->runlist_id = 0;
     e->channel_count = 0;
-    e->allow_schedule = 0;
+    e->allow = 0;
     e->channel_id = local_ctx.channel_id;
     e->token = local_ctx.token;
 
@@ -281,7 +282,7 @@ int BPF_KPROBE(trace_task_destroy, struct nv_gpu_task_destroy_ctx *hook_ctx)
     e->interleave_level = 0;
     e->runlist_id = 0;
     e->channel_count = 0;
-    e->allow_schedule = 0;
+    e->allow = 0;
     e->channel_id = 0;
     e->token = 0;
 

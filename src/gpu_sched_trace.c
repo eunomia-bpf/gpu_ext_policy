@@ -30,7 +30,7 @@ static const char *hook_type_str(int type)
 {
     switch (type) {
     case HOOK_TASK_INIT:    return "TASK_INIT";
-    case HOOK_SCHEDULE:     return "SCHEDULE";
+    case HOOK_BIND:         return "BIND";
     case HOOK_TOKEN_REQUEST: return "TOKEN_REQ";
     case HOOK_TASK_DESTROY: return "TASK_DESTROY";
     default:                return "UNKNOWN";
@@ -84,7 +84,7 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
                e->runlist_id);
         break;
 
-    case HOOK_SCHEDULE:
+    case HOOK_BIND:
         printf("%s.%06llu [CPU%02u] %-12s PID=%-6u %-16s TSG=%-4llu channels=%u timeslice=%llu us interleave=%s allowed=%s\n",
                ts_buf, (unsigned long long)(e->timestamp_ns % 1000000000 / 1000),
                e->cpu, hook_type_str(e->hook_type),
@@ -93,7 +93,7 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
                e->channel_count,
                (unsigned long long)e->timeslice_us,
                interleave_str(e->interleave_level),
-               e->allow_schedule ? "yes" : "no");
+               e->allow ? "yes" : "no");
         break;
 
     case HOOK_TOKEN_REQUEST:
@@ -129,11 +129,11 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 static void print_stats(struct gpu_sched_trace_bpf *skel)
 {
     int fd = bpf_map__fd(skel->maps.stats);
-    __u64 task_init = 0, schedule = 0, token_request = 0, task_destroy = 0, dropped = 0, read_failed = 0;
+    __u64 task_init = 0, bind = 0, token_request = 0, task_destroy = 0, dropped = 0, read_failed = 0;
     __u32 key;
 
     key = 0; bpf_map_lookup_elem(fd, &key, &task_init);
-    key = 1; bpf_map_lookup_elem(fd, &key, &schedule);
+    key = 1; bpf_map_lookup_elem(fd, &key, &bind);
     key = 2; bpf_map_lookup_elem(fd, &key, &token_request);
     key = 3; bpf_map_lookup_elem(fd, &key, &task_destroy);
     key = 4; bpf_map_lookup_elem(fd, &key, &dropped);
@@ -141,7 +141,7 @@ static void print_stats(struct gpu_sched_trace_bpf *skel)
 
     printf("\n=== Statistics ===\n");
     printf("task_init:     %llu\n", (unsigned long long)task_init);
-    printf("schedule:      %llu\n", (unsigned long long)schedule);
+    printf("bind:          %llu\n", (unsigned long long)bind);
     printf("token_request: %llu\n", (unsigned long long)token_request);
     printf("task_destroy:  %llu\n", (unsigned long long)task_destroy);
     printf("dropped:       %llu\n", (unsigned long long)dropped);
@@ -155,7 +155,7 @@ static void usage(const char *prog)
     fprintf(stderr, "  -h    Show this help\n");
     fprintf(stderr, "\nTraces GPU scheduling events from nvidia.ko:\n");
     fprintf(stderr, "  TASK_INIT    - TSG (channel group) creation\n");
-    fprintf(stderr, "  SCHEDULE     - TSG scheduling/enabling\n");
+    fprintf(stderr, "  BIND         - TSG bind to hardware runlist (one-time, admission control)\n");
     fprintf(stderr, "  TOKEN_REQ    - Work submit token request (for sync, via ioctl)\n");
     fprintf(stderr, "  TASK_DESTROY - TSG destruction\n");
     fprintf(stderr, "\nNote: TOKEN_REQ is triggered by GET_WORK_SUBMIT_TOKEN ioctl,\n");
@@ -211,7 +211,7 @@ int main(int argc, char **argv)
     }
 
     printf("GPU Scheduler Trace started. Press Ctrl+C to stop.\n");
-    printf("Tracing: nv_gpu_sched_{task_init,schedule,token_request,task_destroy}\n");
+    printf("Tracing: nv_gpu_sched_{task_init,bind,token_request,task_destroy}\n");
     printf("---\n");
 
     /* Poll ring buffer */
