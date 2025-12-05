@@ -21,3 +21,5 @@ chunk_trace
 prefetch_trace
 gpu_sched_trace
 gpu_preempt_ctrl
+gpu_sched_set_timeslices
+test_timeslice_policy.py

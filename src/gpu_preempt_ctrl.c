@@ -39,6 +39,11 @@
 #include "gpu_preempt_ctrl.skel.h"
 #include "gpu_preempt_ctrl_event.h"
 
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+    return vfprintf(stderr, format, args);
+}
+
 /* NVIDIA ioctl constants */
 #define NV_IOCTL_MAGIC      'F'
 #define NV_IOCTL_BASE       200
@@ -556,7 +561,7 @@ int main(int argc, char **argv)
     }
 
     /* Set up libbpf errors and debug info callback */
-    libbpf_set_print(NULL);
+    libbpf_set_print(libbpf_print_fn);
 
     /* Set up signal handlers */
     signal(SIGINT, sig_handler);

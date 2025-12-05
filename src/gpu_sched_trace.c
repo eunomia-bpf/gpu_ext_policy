@@ -19,6 +19,11 @@
 #include "gpu_sched_trace.skel.h"
 #include "gpu_sched_trace_event.h"
 
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+    return vfprintf(stderr, format, args);
+}
+
 static volatile bool exiting = false;
 
 static void sig_handler(int sig)
@@ -181,7 +186,7 @@ int main(int argc, char **argv)
     }
 
     /* Set up libbpf errors and debug info callback */
-    libbpf_set_print(NULL);
+    libbpf_set_print(libbpf_print_fn);
 
     /* Set up signal handlers */
     signal(SIGINT, sig_handler);

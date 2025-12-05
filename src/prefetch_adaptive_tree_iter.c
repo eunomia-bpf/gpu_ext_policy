@@ -12,6 +12,11 @@
 #include "cleanup_struct_ops.h"
 #include "nvml_monitor.h"
 
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+    return vfprintf(stderr, format, args);
+}
+
 static volatile bool exiting = false;
 static nvmlDevice_t nvml_device = NULL;
 
@@ -161,6 +166,9 @@ int main(int argc, char **argv) {
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
+
+    /* Set up libbpf debug output */
+    libbpf_set_print(libbpf_print_fn);
 
     /* Initialize NVML for adaptive mode */
     if (config.fixed_thresh < 0) {

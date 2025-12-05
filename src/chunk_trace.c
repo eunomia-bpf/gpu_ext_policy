@@ -13,6 +13,11 @@
 #include "chunk_trace.skel.h"
 #include "chunk_trace_event.h"
 
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+    return vfprintf(stderr, format, args);
+}
+
 static volatile sig_atomic_t exiting = 0;
 
 // Hook type names
@@ -155,7 +160,7 @@ int main(int argc, char **argv)
     int err;
 
     // Set up libbpf errors and debug info callback
-    libbpf_set_print(NULL);
+    libbpf_set_print(libbpf_print_fn);
 
     // Open BPF application
     skel = chunk_trace_bpf__open();

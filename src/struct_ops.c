@@ -11,6 +11,11 @@
 
 #include "struct_ops.skel.h"
 
+static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
+{
+    return vfprintf(stderr, format, args);
+}
+
 static volatile bool exiting = false;
 
 void handle_signal(int sig) {
@@ -113,6 +118,9 @@ int main(int argc, char **argv) {
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
+
+    /* Set up libbpf debug output */
+    libbpf_set_print(libbpf_print_fn);
 
     /* Check and report old struct_ops instances */
     cleanup_old_struct_ops();
