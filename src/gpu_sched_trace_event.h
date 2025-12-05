@@ -23,7 +23,6 @@ struct gpu_sched_event {
 
     // Common fields
     __u64 tsg_id;           // TSG (channel group) ID
-    __u32 gpu_instance;     // GPU instance
 
     // task_init specific fields
     __u32 engine_type;      // Engine type (GRAPHICS, COPY, etc.)

@@ -31,10 +31,8 @@ struct nv_gpu_task_init_ctx {
     u64 default_timeslice;
     u32 default_interleave;
     u32 runlist_id;
-    u32 subdev_inst;
     u64 timeslice;
     u32 interleave_level;
-    u32 priority;
 };
 
 struct nv_gpu_schedule_ctx {
@@ -50,12 +48,10 @@ struct nv_gpu_token_request_ctx {
     u32 channel_id;
     u64 tsg_id;
     u32 token;
-    u32 gpu_instance;
 };
 
 struct nv_gpu_task_destroy_ctx {
     u64 tsg_id;
-    u64 total_submissions;
 };
 
 // Ring buffer for outputting events
@@ -124,7 +120,6 @@ int BPF_KPROBE(trace_task_init, struct nv_gpu_task_init_ctx *hook_ctx)
     bpf_get_current_comm(&e->comm, sizeof(e->comm));
     e->hook_type = HOOK_TASK_INIT;
     e->tsg_id = read_ok ? local_ctx.tsg_id : 0xFFFFFFFF;
-    e->gpu_instance = local_ctx.subdev_inst;
     e->engine_type = local_ctx.engine_type;
     e->timeslice_us = local_ctx.default_timeslice;
     e->interleave_level = local_ctx.default_interleave;
@@ -176,7 +171,6 @@ int BPF_KPROBE(trace_schedule, struct nv_gpu_schedule_ctx *hook_ctx)
     bpf_get_current_comm(&e->comm, sizeof(e->comm));
     e->hook_type = HOOK_SCHEDULE;
     e->tsg_id = read_ok ? local_ctx.tsg_id : 0xFFFFFFFF;
-    e->gpu_instance = 0;
     e->engine_type = 0;
     e->timeslice_us = local_ctx.timeslice_us;
     e->interleave_level = local_ctx.interleave_level;
@@ -231,7 +225,6 @@ int BPF_KPROBE(trace_token_request, struct nv_gpu_token_request_ctx *hook_ctx)
     bpf_get_current_comm(&e->comm, sizeof(e->comm));
     e->hook_type = HOOK_TOKEN_REQUEST;
     e->tsg_id = read_ok ? local_ctx.tsg_id : 0xFFFFFFFF;
-    e->gpu_instance = local_ctx.gpu_instance;
     e->engine_type = 0;
     e->timeslice_us = 0;
     e->interleave_level = 0;
@@ -283,7 +276,6 @@ int BPF_KPROBE(trace_task_destroy, struct nv_gpu_task_destroy_ctx *hook_ctx)
     bpf_get_current_comm(&e->comm, sizeof(e->comm));
     e->hook_type = HOOK_TASK_DESTROY;
     e->tsg_id = read_ok ? local_ctx.tsg_id : 0xFFFFFFFF;
-    e->gpu_instance = 0;
     e->engine_type = 0;
     e->timeslice_us = 0;
     e->interleave_level = 0;

@@ -98,14 +98,13 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 
     case HOOK_TOKEN_REQUEST:
         // Token request - triggered by GET_WORK_SUBMIT_TOKEN ioctl (typically for sync)
-        printf("%s.%06llu [CPU%02u] %-12s PID=%-6u %-16s TSG=%-4llu channel=%u token=%u gpu=%u\n",
+        printf("%s.%06llu [CPU%02u] %-12s PID=%-6u %-16s TSG=%-4llu channel=%u token=%u\n",
                ts_buf, (unsigned long long)(e->timestamp_ns % 1000000000 / 1000),
                e->cpu, hook_type_str(e->hook_type),
                e->tgid, e->comm,
                (unsigned long long)e->tsg_id,
                e->channel_id,
-               e->token,
-               e->gpu_instance);
+               e->token);
         break;
 
     case HOOK_TASK_DESTROY:
