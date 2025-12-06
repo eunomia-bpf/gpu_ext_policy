@@ -70,15 +70,63 @@ typedef struct {
 /* Forward declarations - opaque types for BPF */
 typedef struct uvm_pmm_gpu_struct uvm_pmm_gpu_t;
 
-/* uvm_va_block_struct - minimal definition for accessing start/end addresses */
+/* Forward declarations for va_space chain */
+struct mm_struct;
+struct task_struct;
+
+/* uvm_va_space_mm_struct - contains mm pointer */
+struct uvm_va_space_mm_struct {
+	struct mm_struct *mm;
+	// ... other fields not needed
+};
+typedef struct uvm_va_space_mm_struct uvm_va_space_mm_t;
+
+struct uvm_va_space_struct {
+	char _padding[0x6840];  // Offset to va_space_mm (approximate, CO-RE will fix)
+	uvm_va_space_mm_t va_space_mm;
+};
+typedef struct uvm_va_space_struct uvm_va_space_t;
+
+/* uvm_va_range_struct - to access va_space */
+struct uvm_va_range_struct {
+	uvm_va_space_t *va_space;
+	// ... other fields not needed
+};
+typedef struct uvm_va_range_struct uvm_va_range_t;
+
+/* uvm_va_range_managed_struct - contains va_range as first member */
+struct uvm_va_range_managed_struct {
+	struct uvm_va_range_struct va_range;
+	// ... other fields not needed
+};
+typedef struct uvm_va_range_managed_struct uvm_va_range_managed_t;
+
+/* Nested structures for va_block->cpu.fault_authorized */
+struct uvm_va_block_fault_authorized {
+	unsigned long long first_fault_stamp;
+	int first_pid;   // pid_t is int
+	unsigned short page_index;
+};
+
+struct uvm_va_block_cpu_state {
+	void *node_state;
+	unsigned long allocated_bitmap[8];
+	unsigned long resident_bitmap[8];
+	unsigned long pte_bits[2][8];
+	unsigned char ever_mapped;
+	struct uvm_va_block_fault_authorized fault_authorized;
+};
+
+/* uvm_va_block_struct - definition for accessing start/end addresses, owner PID, and va_space */
 struct uvm_va_block_struct {
-	/* We don't know the exact internal layout, but based on empirical testing:
-	 * - start address is at offset ~24
-	 * - end address is at offset ~32
-	 * Using CO-RE, BPF will relocate these offsets automatically */
-	char _padding[24];
+	/* Using CO-RE, BPF will relocate these offsets automatically */
+	char _kref[16];           // nv_kref_t
+	char _lock[24];           // uvm_mutex_t (approximate)
+	uvm_va_range_managed_t *managed_range;  // pointer to managed_range
 	unsigned long long start;  // VA block start address
 	unsigned long long end;    // VA block end address
+	char _masks[192];          // processor masks (approximate)
+	struct uvm_va_block_cpu_state cpu;  // CPU state including fault_authorized
 };
 
 typedef struct uvm_va_block_struct uvm_va_block_t;

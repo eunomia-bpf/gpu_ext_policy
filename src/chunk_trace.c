@@ -59,13 +59,14 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
     const char *hook_name = (e->hook_type < 4) ? hook_names[e->hook_type] : "UNKNOWN";
 
     // CSV output format:
-    // time_ms,hook_type,cpu,chunk_addr,list_addr,va_block,va_start,va_end,va_page_index
+    // time_ms,hook_type,pid,owner_pid,va_space,cpu,chunk_addr,list_addr,va_block,va_start,va_end,va_page_index
 
     if (e->hook_type == 4) {
         // EVICTION_PREPARE: chunk_addr is used_list, list_addr is unused_list
-        printf("%llu,%s,%u,0x%llx,0x%llx,,,,%u\n",
+        printf("%llu,%s,%u,,,%u,0x%llx,0x%llx,,,,%u\n",
                elapsed_ms,
                hook_name,
+               e->pid,
                e->cpu,
                e->chunk_addr,  // used_list
                e->list_addr,   // unused_list
@@ -73,9 +74,12 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
     } else {
         // Regular hooks
         if (e->va_block != 0) {
-            printf("%llu,%s,%u,0x%llx,0x%llx,0x%llx,0x%llx,0x%llx,%u\n",
+            printf("%llu,%s,%u,%u,0x%llx,%u,0x%llx,0x%llx,0x%llx,0x%llx,0x%llx,%u\n",
                    elapsed_ms,
                    hook_name,
+                   e->pid,
+                   e->owner_pid,
+                   e->va_space,
                    e->cpu,
                    e->chunk_addr,
                    e->list_addr,
@@ -85,9 +89,10 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
                    e->va_page_index);
             va_block_count++;
         } else {
-            printf("%llu,%s,%u,0x%llx,0x%llx,,,,%u\n",
+            printf("%llu,%s,%u,,,%u,0x%llx,0x%llx,,,,%u\n",
                    elapsed_ms,
                    hook_name,
+                   e->pid,
                    e->cpu,
                    e->chunk_addr,
                    e->list_addr,
@@ -196,7 +201,7 @@ int main(int argc, char **argv)
     signal(SIGTERM, sig_handler);
 
     // Print CSV header
-    printf("time_ms,hook_type,cpu,chunk_addr,list_addr,va_block,va_start,va_end,va_page_index\n");
+    printf("time_ms,hook_type,pid,owner_pid,va_space,cpu,chunk_addr,list_addr,va_block,va_start,va_end,va_page_index\n");
 
     // Process events
     while (!exiting) {

@@ -50,6 +50,8 @@ static __always_inline void submit_event(u32 hook_type, u64 chunk, u64 list)
     u64 va_start = 0;
     u64 va_end = 0;
     u32 va_page_index = 0;
+    u32 owner_pid = 0;
+    u64 va_space_ptr = 0;
 
     e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
     if (!e) {
@@ -71,6 +73,24 @@ static __always_inline void submit_event(u32 hook_type, u64 chunk, u64 list)
             va_start = BPF_CORE_READ(va_block, start);
             va_end = BPF_CORE_READ(va_block, end);
 
+            // Read va_space pointer: va_block->managed_range->va_range.va_space
+            uvm_va_range_managed_t *managed_range = BPF_CORE_READ(va_block, managed_range);
+            if (managed_range != 0) {
+                uvm_va_space_t *va_space = BPF_CORE_READ(managed_range, va_range.va_space);
+                va_space_ptr = (u64)va_space;
+
+                // Read owner PID: va_space->va_space_mm.mm->owner->tgid
+                if (va_space != 0) {
+                    struct mm_struct *mm = BPF_CORE_READ(va_space, va_space_mm.mm);
+                    if (mm != 0) {
+                        struct task_struct *owner = BPF_CORE_READ(mm, owner);
+                        if (owner != 0) {
+                            owner_pid = BPF_CORE_READ(owner, tgid);
+                        }
+                    }
+                }
+            }
+
             // Read va_block_page_index from chunk
             // This is a bitfield, so we need to read the whole struct then extract
             struct uvm_gpu_chunk_struct chunk_copy;
@@ -81,6 +101,9 @@ static __always_inline void submit_event(u32 hook_type, u64 chunk, u64 list)
 
     e->timestamp_ns = bpf_ktime_get_ns();
     e->cpu = bpf_get_smp_processor_id();
+    e->pid = bpf_get_current_pid_tgid() >> 32;
+    e->owner_pid = owner_pid;
+    e->va_space = va_space_ptr;
     e->hook_type = hook_type;
     e->chunk_addr = chunk;
     e->list_addr = list;
