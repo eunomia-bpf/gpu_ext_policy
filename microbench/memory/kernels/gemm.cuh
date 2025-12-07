@@ -93,8 +93,8 @@ inline void run_gemm(size_t total_working_set, const std::string& mode,
             if (i % report_interval == 0) {
                 int percent = (int)(i * 100 / total_elements);
                 if (percent != last_percent && percent % 5 == 0) {
-                    fprintf(stderr, "  %d%% complete\r", percent);
-                    fflush(stderr);
+                    // fprintf(stderr, "  %d%% complete\r", percent);
+                    // fflush(stderr);
                     last_percent = percent;
                 }
             }

@@ -23,9 +23,10 @@ OUT = Path(__file__).parent / "results"
 
 # Benchmark parameters
 SIZE_FACTOR = 0.6
-ITERATIONS = 10
+ITERATIONS = 1
 # KERNEL = "rand_stream"
-KERNEL = "seq_stream"
+# KERNEL = "seq_stream"
+KERNEL = "gemm"
 NUM_ROUNDS = 10
 
 # Policy configurations to test
