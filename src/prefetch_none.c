@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
     printf("Successfully loaded and attached BPF prefetch_none policy!\n");
     printf("The prefetch policy is now active and will DISABLE all prefetching.\n");
-    printf("Monitor dmesg for BPF debug output.\n");
+    printf("Monitor tracepipe for BPF debug output.\n");
     printf("\nPress Ctrl-C to exit and detach the policy...\n");
 
     /* Wait for signal */

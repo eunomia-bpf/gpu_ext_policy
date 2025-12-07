@@ -217,7 +217,7 @@ int main(int argc, char **argv) {
         printf("  Invert: %s\n", config.invert ? "yes" : "no");
         printf("Monitoring PCIe traffic and updating percentage every second...\n");
     }
-    printf("Monitor dmesg for BPF debug output.\n");
+    printf("Monitor tracepipe for BPF debug output.\n");
     printf("\nPress Ctrl-C to exit and detach the policy...\n\n");
 
     /* Main loop */

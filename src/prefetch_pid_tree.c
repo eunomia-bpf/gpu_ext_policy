@@ -210,14 +210,15 @@ int main(int argc, char **argv) {
     key = CONFIG_DEFAULT_PARAM;
     bpf_map_update_elem(config_fd, &key, &default_param, BPF_ANY);
 
-    /* Attach kprobe first */
-    err = prefetch_pid_tree_bpf__attach(skel);
-    if (err) {
-        fprintf(stderr, "Failed to attach kprobe: %d\n", err);
+    /* Attach kprobe manually (not through __attach which also attaches struct_ops) */
+    skel->links.prefetch_get_hint_va_block = bpf_program__attach(skel->progs.prefetch_get_hint_va_block);
+    if (!skel->links.prefetch_get_hint_va_block) {
+        err = -errno;
+        fprintf(stderr, "Failed to attach kprobe: %s (%d)\n", strerror(-err), err);
         goto cleanup;
     }
 
-    /* Then attach struct_ops */
+    /* Then attach struct_ops separately */
     link = bpf_map__attach_struct_ops(skel->maps.uvm_ops_prefetch_pid_tree);
     if (!link) {
         err = -errno;

@@ -1,0 +1,751 @@
+libbpf: loading object 'eviction_pid_quota_bpf' from buffer
+libbpf: elf: section(2) .symtab, size 816, link 1, flags 0, type=2
+libbpf: elf: section(3) struct_ops/uvm_pmm_chunk_activate, size 768, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_chunk_activate': found program 'uvm_pmm_chunk_activate' at insn offset 0 (0 bytes), code size 96 insns (768 bytes)
+libbpf: elf: section(4) struct_ops/uvm_pmm_chunk_used, size 1624, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_chunk_used': found program 'uvm_pmm_chunk_used' at insn offset 0 (0 bytes), code size 203 insns (1624 bytes)
+libbpf: elf: section(5) struct_ops/uvm_pmm_eviction_prepare, size 296, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_eviction_prepare': found program 'uvm_pmm_eviction_prepare' at insn offset 0 (0 bytes), code size 37 insns (296 bytes)
+libbpf: elf: section(6) license, size 4, link 0, flags 3, type=1
+libbpf: license of eviction_pid_quota_bpf is GPL
+libbpf: elf: section(7) .struct_ops, size 48, link 0, flags 3, type=1
+libbpf: elf: section(8) .maps, size 96, link 0, flags 3, type=1
+libbpf: elf: section(9) .relstruct_ops/uvm_pmm_chunk_activate, size 64, link 2, flags 40, type=9
+libbpf: elf: section(10) .relstruct_ops/uvm_pmm_chunk_used, size 176, link 2, flags 40, type=9
+libbpf: elf: section(11) .relstruct_ops/uvm_pmm_eviction_prepare, size 48, link 2, flags 40, type=9
+libbpf: elf: section(12) .rel.struct_ops, size 48, link 2, flags 40, type=9
+libbpf: elf: section(13) .BTF, size 39815, link 0, flags 0, type=1
+libbpf: elf: section(14) .BTF.ext, size 2492, link 0, flags 0, type=1
+libbpf: looking for externs among 34 symbols...
+libbpf: collected 1 externs total
+libbpf: extern (ksym) #0: symbol 30, name bpf_uvm_pmm_chunk_move_tail
+libbpf: map 'config': at sec_idx 8, offset 0.
+libbpf: map 'config': found type = 2.
+libbpf: map 'config': found key [8], sz = 4.
+libbpf: map 'config': found value [12], sz = 8.
+libbpf: map 'config': found max_entries = 8.
+libbpf: map 'pid_chunk_count': at sec_idx 8, offset 32.
+libbpf: map 'pid_chunk_count': found type = 1.
+libbpf: map 'pid_chunk_count': found key [8], sz = 4.
+libbpf: map 'pid_chunk_count': found value [22], sz = 40.
+libbpf: map 'pid_chunk_count': found max_entries = 256.
+libbpf: map 'active_chunks': at sec_idx 8, offset 64.
+libbpf: map 'active_chunks': found type = 1.
+libbpf: map 'active_chunks': found key [12], sz = 8.
+libbpf: map 'active_chunks': found value [8], sz = 4.
+libbpf: map 'active_chunks': found max_entries = 65536.
+libbpf: struct_ops init: struct uvm_gpu_ext(type_id=460) uvm_ops_pid_lfu found at offset 0
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': collecting relocation for section(3) 'struct_ops/uvm_pmm_chunk_activate'
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #0: insn #60 against 'active_chunks'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 2 (active_chunks, sec 8, off 64) for insn #60
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #1: insn #68 against 'active_chunks'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 2 (active_chunks, sec 8, off 64) for insn #68
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #2: insn #73 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 1 (pid_chunk_count, sec 8, off 32) for insn #73
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #3: insn #90 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 1 (pid_chunk_count, sec 8, off 32) for insn #90
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': collecting relocation for section(4) 'struct_ops/uvm_pmm_chunk_used'
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #0: insn #58 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 8, off 0) for insn #58
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #1: insn #69 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 8, off 0) for insn #69
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #2: insn #77 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_chunk_used': found map 1 (pid_chunk_count, sec 8, off 32) for insn #77
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #3: insn #90 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 8, off 0) for insn #90
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #4: insn #100 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 8, off 0) for insn #100
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #5: insn #114 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_chunk_used': found map 1 (pid_chunk_count, sec 8, off 32) for insn #114
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #6: insn #126 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_chunk_used': found map 1 (pid_chunk_count, sec 8, off 32) for insn #126
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #7: insn #148 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 8, off 0) for insn #148
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #8: insn #162 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 8, off 0) for insn #162
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #9: insn #172 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 8, off 0) for insn #172
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #10: insn #191 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_chunk_used': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 30) for insn #191
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': collecting relocation for section(5) 'struct_ops/uvm_pmm_eviction_prepare'
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #0: insn #16 against 'active_chunks'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (active_chunks, sec 8, off 64) for insn #16
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #1: insn #20 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (pid_chunk_count, sec 8, off 32) for insn #20
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #2: insn #32 against 'active_chunks'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (active_chunks, sec 8, off 64) for insn #32
+libbpf: struct_ops reloc uvm_ops_pid_lfu: for 25 value 0 shdr_idx 3 rel->r_offset 24 map->sec_offset 0 name 325 ('uvm_pmm_chunk_activate')
+libbpf: struct_ops reloc uvm_ops_pid_lfu: for 28 value 0 shdr_idx 4 rel->r_offset 32 map->sec_offset 0 name 378 ('uvm_pmm_chunk_used')
+libbpf: struct_ops reloc uvm_ops_pid_lfu: for 31 value 0 shdr_idx 5 rel->r_offset 40 map->sec_offset 0 name 432 ('uvm_pmm_eviction_prepare')
+libbpf: object 'eviction_pid_qu': failed (-95) to create BPF token from '/sys/fs/bpf', skipping optional step...
+libbpf: loaded kernel BTF from '/sys/kernel/btf/vmlinux'
+libbpf: extern (func ksym) 'bpf_uvm_pmm_chunk_move_tail': resolved to nvidia_uvm [150208]
+libbpf: struct_ops init_kern uvm_ops_pid_lfu: type_id:460 kern_type_id:148506 kern_vtype_id:148521
+libbpf: struct_ops init_kern uvm_ops_pid_lfu: func ptr uvm_pmm_chunk_activate is set to prog uvm_pmm_chunk_activate from data(+24) to kern_data(+24)
+libbpf: struct_ops init_kern uvm_ops_pid_lfu: func ptr uvm_pmm_chunk_used is set to prog uvm_pmm_chunk_used from data(+32) to kern_data(+32)
+libbpf: struct_ops init_kern uvm_ops_pid_lfu: func ptr uvm_pmm_eviction_prepare is set to prog uvm_pmm_eviction_prepare from data(+40) to kern_data(+40)
+libbpf: sec 'struct_ops/uvm_pmm_chunk_activate': found 6 CO-RE relocations
+libbpf: CO-RE relocating [32] typedef uvm_gpu_chunk_t: found target candidate [147854] typedef uvm_gpu_chunk_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: <byte_off> [32] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: matching candidate #0 <byte_off> [147854] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: patched insn #9 (ALU/ALU64) imm 32 -> 32
+libbpf: CO-RE relocating [39] typedef uvm_va_block_t: found target candidate [147900] typedef uvm_va_block_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: <byte_off> [39] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: matching candidate #0 <byte_off> [147900] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: patched insn #17 (ALU/ALU64) imm 40 -> 40
+libbpf: CO-RE relocating [46] typedef uvm_va_range_managed_t: found target candidate [147894] typedef uvm_va_range_managed_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: <byte_off> [46] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: matching candidate #0 <byte_off> [147894] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: patched insn #25 (ALU/ALU64) imm 0 -> 0
+libbpf: CO-RE relocating [57] typedef uvm_va_space_t: found target candidate [147902] typedef uvm_va_space_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: <byte_off> [57] typedef uvm_va_space_t.va_space_mm.mm (0:1:0 @ offset 26688)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: matching candidate #0 <byte_off> [147902] typedef uvm_va_space_t.va_space_mm.mm (0:43:0 @ offset 367864)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: patched insn #33 (ALU/ALU64) imm 26688 -> 367864
+libbpf: CO-RE relocating [63] struct mm_struct: found target candidate [276] struct mm_struct in [vmlinux]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: <byte_off> [63] struct mm_struct.owner (0:0:43 @ offset 1496)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: matching candidate #0 <byte_off> [276] struct mm_struct.owner (0:0:51 @ offset 1176)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: patched insn #41 (ALU/ALU64) imm 1496 -> 1176
+libbpf: CO-RE relocating [181] struct task_struct: found target candidate [115] struct task_struct in [vmlinux]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: <byte_off> [181] struct task_struct.tgid (0:79 @ offset 1404)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: matching candidate #0 <byte_off> [115] struct task_struct.tgid (0:94 @ offset 2772)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: patched insn #49 (ALU/ALU64) imm 1404 -> 2772
+libbpf: sec 'struct_ops/uvm_pmm_chunk_used': found 6 CO-RE relocations
+libbpf: prog 'uvm_pmm_chunk_used': relo #0: <byte_off> [32] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_used': relo #0: matching candidate #0 <byte_off> [147854] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_used': relo #0: patched insn #4 (ALU/ALU64) imm 32 -> 32
+libbpf: prog 'uvm_pmm_chunk_used': relo #1: <byte_off> [39] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_used': relo #1: matching candidate #0 <byte_off> [147900] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_used': relo #1: patched insn #13 (ALU/ALU64) imm 40 -> 40
+libbpf: prog 'uvm_pmm_chunk_used': relo #2: <byte_off> [46] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_used': relo #2: matching candidate #0 <byte_off> [147894] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_used': relo #2: patched insn #21 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_chunk_used': relo #3: <byte_off> [57] typedef uvm_va_space_t.va_space_mm.mm (0:1:0 @ offset 26688)
+libbpf: prog 'uvm_pmm_chunk_used': relo #3: matching candidate #0 <byte_off> [147902] typedef uvm_va_space_t.va_space_mm.mm (0:43:0 @ offset 367864)
+libbpf: prog 'uvm_pmm_chunk_used': relo #3: patched insn #29 (ALU/ALU64) imm 26688 -> 367864
+libbpf: prog 'uvm_pmm_chunk_used': relo #4: <byte_off> [63] struct mm_struct.owner (0:0:43 @ offset 1496)
+libbpf: prog 'uvm_pmm_chunk_used': relo #4: matching candidate #0 <byte_off> [276] struct mm_struct.owner (0:0:51 @ offset 1176)
+libbpf: prog 'uvm_pmm_chunk_used': relo #4: patched insn #37 (ALU/ALU64) imm 1496 -> 1176
+libbpf: prog 'uvm_pmm_chunk_used': relo #5: <byte_off> [181] struct task_struct.tgid (0:79 @ offset 1404)
+libbpf: prog 'uvm_pmm_chunk_used': relo #5: matching candidate #0 <byte_off> [115] struct task_struct.tgid (0:94 @ offset 2772)
+libbpf: prog 'uvm_pmm_chunk_used': relo #5: patched insn #45 (ALU/ALU64) imm 1404 -> 2772
+libbpf: sec 'struct_ops/uvm_pmm_eviction_prepare': found 1 CO-RE relocations
+libbpf: CO-RE relocating [36] struct list_head: found target candidate [96] struct list_head in [vmlinux]
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: <byte_off> [36] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: patched insn #2 (ALU/ALU64) imm 0 -> 0
+libbpf: map 'config': created successfully, fd=3
+libbpf: map 'pid_chunk_count': created successfully, fd=4
+libbpf: map 'active_chunks': created successfully, fd=5
+libbpf: map 'uvm_ops_pid_lfu': created successfully, fd=6
+Checking for old struct_ops instances...
+No old struct_ops instances found.
+Successfully loaded quota-based eviction policy!
+
+Configuration (quota as percentage of total chunks):
+  High priority PID: 27051 (quota: set)
+    Quota: 50%
+  Low priority PID:  27053 (quota: 50%)
+  Default quota:     unlimited
+
+Press Ctrl-C to exit...
+
+=== Per-PID Statistics ===
+  High priority PID 27051: no data
+  Low priority PID 27053: no data
+
+=== Summary ===
+  Total current chunks: 0
+  Total activated: 0
+  Total used calls: 0
+  Policy allow (moved): 0
+  Policy deny (not moved): 0
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7765
+    Total activated: 12697
+    Total used calls: 63475
+    Policy allow (moved): 24093 (38.0%)
+    Policy deny (not moved): 39382 (62.0%)
+  Low priority PID 27053:
+    Current active chunks: 7776
+    Total activated: 12646
+    Total used calls: 63220
+    Policy allow (moved): 39184 (62.0%)
+    Policy deny (not moved): 24036 (38.0%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 25343
+  Total used calls: 126695
+  Policy allow (moved): 63277 (49.9%)
+  Policy deny (not moved): 63418 (50.1%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7773
+    Total activated: 23765
+    Total used calls: 118805
+    Policy allow (moved): 75214 (63.3%)
+    Policy deny (not moved): 43591 (36.7%)
+  Low priority PID 27053:
+    Current active chunks: 7768
+    Total activated: 23720
+    Total used calls: 118580
+    Policy allow (moved): 44871 (37.8%)
+    Policy deny (not moved): 73709 (62.2%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 47485
+  Total used calls: 237385
+  Policy allow (moved): 120085 (50.6%)
+  Policy deny (not moved): 117300 (49.4%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7770
+    Total activated: 34849
+    Total used calls: 174215
+    Policy allow (moved): 98567 (56.6%)
+    Policy deny (not moved): 75648 (43.4%)
+  Low priority PID 27053:
+    Current active chunks: 7771
+    Total activated: 34808
+    Total used calls: 174015
+    Policy allow (moved): 72217 (41.5%)
+    Policy deny (not moved): 101798 (58.5%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 69657
+  Total used calls: 348230
+  Policy allow (moved): 170784 (49.0%)
+  Policy deny (not moved): 177446 (51.0%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7773
+    Total activated: 45933
+    Total used calls: 229630
+    Policy allow (moved): 111757 (48.7%)
+    Policy deny (not moved): 117873 (51.3%)
+  Low priority PID 27053:
+    Current active chunks: 7768
+    Total activated: 45882
+    Total used calls: 229376
+    Policy allow (moved): 107766 (47.0%)
+    Policy deny (not moved): 121610 (53.0%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 91815
+  Total used calls: 459006
+  Policy allow (moved): 219523 (47.8%)
+  Policy deny (not moved): 239483 (52.2%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7780
+    Total activated: 57022
+    Total used calls: 285065
+    Policy allow (moved): 115453 (40.5%)
+    Policy deny (not moved): 169612 (59.5%)
+  Low priority PID 27053:
+    Current active chunks: 7761
+    Total activated: 56956
+    Total used calls: 284740
+    Policy allow (moved): 156693 (55.0%)
+    Policy deny (not moved): 128047 (45.0%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 113978
+  Total used calls: 569805
+  Policy allow (moved): 272146 (47.8%)
+  Policy deny (not moved): 297659 (52.2%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7776
+    Total activated: 68104
+    Total used calls: 340470
+    Policy allow (moved): 135207 (39.7%)
+    Policy deny (not moved): 205263 (60.3%)
+  Low priority PID 27053:
+    Current active chunks: 7765
+    Total activated: 68033
+    Total used calls: 340115
+    Policy allow (moved): 193827 (57.0%)
+    Policy deny (not moved): 146288 (43.0%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 136137
+  Total used calls: 680585
+  Policy allow (moved): 329034 (48.3%)
+  Policy deny (not moved): 351551 (51.7%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7773
+    Total activated: 79147
+    Total used calls: 395680
+    Policy allow (moved): 139227 (35.2%)
+    Policy deny (not moved): 256453 (64.8%)
+  Low priority PID 27053:
+    Current active chunks: 7768
+    Total activated: 79072
+    Total used calls: 395302
+    Policy allow (moved): 244360 (61.8%)
+    Policy deny (not moved): 150942 (38.2%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 158219
+  Total used calls: 790982
+  Policy allow (moved): 383587 (48.5%)
+  Policy deny (not moved): 407395 (51.5%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7775
+    Total activated: 90210
+    Total used calls: 450985
+    Policy allow (moved): 171622 (38.1%)
+    Policy deny (not moved): 279363 (61.9%)
+  Low priority PID 27053:
+    Current active chunks: 7766
+    Total activated: 90121
+    Total used calls: 450540
+    Policy allow (moved): 271914 (60.4%)
+    Policy deny (not moved): 178626 (39.6%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 180331
+  Total used calls: 901525
+  Policy allow (moved): 443536 (49.2%)
+  Policy deny (not moved): 457989 (50.8%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7767
+    Total activated: 101257
+    Total used calls: 506210
+    Policy allow (moved): 198182 (39.2%)
+    Policy deny (not moved): 308028 (60.8%)
+  Low priority PID 27053:
+    Current active chunks: 7774
+    Total activated: 101182
+    Total used calls: 505836
+    Policy allow (moved): 302864 (59.9%)
+    Policy deny (not moved): 202972 (40.1%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 202439
+  Total used calls: 1012046
+  Policy allow (moved): 501046 (49.5%)
+  Policy deny (not moved): 511000 (50.5%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7773
+    Total activated: 112338
+    Total used calls: 561615
+    Policy allow (moved): 207894 (37.0%)
+    Policy deny (not moved): 353721 (63.0%)
+  Low priority PID 27053:
+    Current active chunks: 7767
+    Total activated: 112251
+    Total used calls: 561180
+    Policy allow (moved): 349294 (62.2%)
+    Policy deny (not moved): 211886 (37.8%)
+
+=== Summary ===
+  Total current chunks: 15540
+  Total activated: 224589
+  Total used calls: 1122795
+  Policy allow (moved): 557188 (49.6%)
+  Policy deny (not moved): 565607 (50.4%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7770
+    Total activated: 123424
+    Total used calls: 617039
+    Policy allow (moved): 227077 (36.8%)
+    Policy deny (not moved): 389962 (63.2%)
+  Low priority PID 27053:
+    Current active chunks: 7771
+    Total activated: 123336
+    Total used calls: 616600
+    Policy allow (moved): 385438 (62.5%)
+    Policy deny (not moved): 231162 (37.5%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 246760
+  Total used calls: 1233639
+  Policy allow (moved): 612515 (49.7%)
+  Policy deny (not moved): 621124 (50.3%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7774
+    Total activated: 134508
+    Total used calls: 672445
+    Policy allow (moved): 274792 (40.9%)
+    Policy deny (not moved): 397653 (59.1%)
+  Low priority PID 27053:
+    Current active chunks: 7767
+    Total activated: 134416
+    Total used calls: 671987
+    Policy allow (moved): 389875 (58.0%)
+    Policy deny (not moved): 282112 (42.0%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 268924
+  Total used calls: 1344432
+  Policy allow (moved): 664667 (49.4%)
+  Policy deny (not moved): 679765 (50.6%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7766
+    Total activated: 145577
+    Total used calls: 727785
+    Policy allow (moved): 302606 (41.6%)
+    Policy deny (not moved): 425179 (58.4%)
+  Low priority PID 27053:
+    Current active chunks: 7775
+    Total activated: 145498
+    Total used calls: 727390
+    Policy allow (moved): 423410 (58.2%)
+    Policy deny (not moved): 303980 (41.8%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 291075
+  Total used calls: 1455175
+  Policy allow (moved): 726016 (49.9%)
+  Policy deny (not moved): 729159 (50.1%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7760
+    Total activated: 156608
+    Total used calls: 782935
+    Policy allow (moved): 356617 (45.5%)
+    Policy deny (not moved): 426318 (54.5%)
+  Low priority PID 27053:
+    Current active chunks: 7781
+    Total activated: 156564
+    Total used calls: 782713
+    Policy allow (moved): 424504 (54.2%)
+    Policy deny (not moved): 358209 (45.8%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 313172
+  Total used calls: 1565648
+  Policy allow (moved): 781121 (49.9%)
+  Policy deny (not moved): 784527 (50.1%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7768
+    Total activated: 167665
+    Total used calls: 838210
+    Policy allow (moved): 385124 (45.9%)
+    Policy deny (not moved): 453086 (54.1%)
+  Low priority PID 27053:
+    Current active chunks: 7773
+    Total activated: 167616
+    Total used calls: 837965
+    Policy allow (moved): 449470 (53.6%)
+    Policy deny (not moved): 388495 (46.4%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 335281
+  Total used calls: 1676175
+  Policy allow (moved): 834594 (49.8%)
+  Policy deny (not moved): 841581 (50.2%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7767
+    Total activated: 178709
+    Total used calls: 893429
+    Policy allow (moved): 415061 (46.5%)
+    Policy deny (not moved): 478368 (53.5%)
+  Low priority PID 27053:
+    Current active chunks: 7774
+    Total activated: 178662
+    Total used calls: 893194
+    Policy allow (moved): 470377 (52.7%)
+    Policy deny (not moved): 422817 (47.3%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 357371
+  Total used calls: 1786623
+  Policy allow (moved): 885438 (49.6%)
+  Policy deny (not moved): 901185 (50.4%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7766
+    Total activated: 189747
+    Total used calls: 948609
+    Policy allow (moved): 459002 (48.4%)
+    Policy deny (not moved): 489607 (51.6%)
+  Low priority PID 27053:
+    Current active chunks: 7775
+    Total activated: 189706
+    Total used calls: 948404
+    Policy allow (moved): 484088 (51.0%)
+    Policy deny (not moved): 464316 (49.0%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 379453
+  Total used calls: 1897013
+  Policy allow (moved): 943090 (49.7%)
+  Policy deny (not moved): 953923 (50.3%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7763
+    Total activated: 200788
+    Total used calls: 1003810
+    Policy allow (moved): 503369 (50.1%)
+    Policy deny (not moved): 500441 (49.9%)
+  Low priority PID 27053:
+    Current active chunks: 7777
+    Total activated: 200762
+    Total used calls: 1003675
+    Policy allow (moved): 490966 (48.9%)
+    Policy deny (not moved): 512709 (51.1%)
+
+=== Summary ===
+  Total current chunks: 15540
+  Total activated: 401550
+  Total used calls: 2007485
+  Policy allow (moved): 994335 (49.5%)
+  Policy deny (not moved): 1013150 (50.5%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7764
+    Total activated: 211833
+    Total used calls: 1059021
+    Policy allow (moved): 552645 (52.2%)
+    Policy deny (not moved): 506376 (47.8%)
+  Low priority PID 27053:
+    Current active chunks: 7777
+    Total activated: 211817
+    Total used calls: 1058940
+    Policy allow (moved): 495794 (46.8%)
+    Policy deny (not moved): 563146 (53.2%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 423650
+  Total used calls: 2117961
+  Policy allow (moved): 1048439 (49.5%)
+  Policy deny (not moved): 1069522 (50.5%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7769
+    Total activated: 222884
+    Total used calls: 1114270
+    Policy allow (moved): 595594 (53.5%)
+    Policy deny (not moved): 518676 (46.5%)
+  Low priority PID 27053:
+    Current active chunks: 7772
+    Total activated: 222871
+    Total used calls: 1114209
+    Policy allow (moved): 513906 (46.1%)
+    Policy deny (not moved): 600303 (53.9%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 445755
+  Total used calls: 2228479
+  Policy allow (moved): 1109500 (49.8%)
+  Policy deny (not moved): 1118979 (50.2%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7771
+    Total activated: 233898
+    Total used calls: 1169331
+    Policy allow (moved): 635304 (54.3%)
+    Policy deny (not moved): 534027 (45.7%)
+  Low priority PID 27053:
+    Current active chunks: 7770
+    Total activated: 233890
+    Total used calls: 1169290
+    Policy allow (moved): 529488 (45.3%)
+    Policy deny (not moved): 639802 (54.7%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 467788
+  Total used calls: 2338621
+  Policy allow (moved): 1164792 (49.8%)
+  Policy deny (not moved): 1173829 (50.2%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7766
+    Total activated: 244934
+    Total used calls: 1224510
+    Policy allow (moved): 678531 (55.4%)
+    Policy deny (not moved): 545979 (44.6%)
+  Low priority PID 27053:
+    Current active chunks: 7775
+    Total activated: 244936
+    Total used calls: 1224515
+    Policy allow (moved): 535968 (43.8%)
+    Policy deny (not moved): 688547 (56.2%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 489870
+  Total used calls: 2449025
+  Policy allow (moved): 1214499 (49.6%)
+  Policy deny (not moved): 1234526 (50.4%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7769
+    Total activated: 255978
+    Total used calls: 1279720
+    Policy allow (moved): 722120 (56.4%)
+    Policy deny (not moved): 557600 (43.6%)
+  Low priority PID 27053:
+    Current active chunks: 7772
+    Total activated: 255975
+    Total used calls: 1279705
+    Policy allow (moved): 553424 (43.2%)
+    Policy deny (not moved): 726281 (56.8%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 511953
+  Total used calls: 2559425
+  Policy allow (moved): 1275544 (49.8%)
+  Policy deny (not moved): 1283881 (50.2%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7776
+    Total activated: 267039
+    Total used calls: 1335015
+    Policy allow (moved): 727122 (54.5%)
+    Policy deny (not moved): 607893 (45.5%)
+  Low priority PID 27053:
+    Current active chunks: 7765
+    Total activated: 267017
+    Total used calls: 1334905
+    Policy allow (moved): 605228 (45.3%)
+    Policy deny (not moved): 729677 (54.7%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 534056
+  Total used calls: 2669920
+  Policy allow (moved): 1332350 (49.9%)
+  Policy deny (not moved): 1337570 (50.1%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7770
+    Total activated: 278053
+    Total used calls: 1390081
+    Policy allow (moved): 741419 (53.3%)
+    Policy deny (not moved): 648662 (46.7%)
+  Low priority PID 27053:
+    Current active chunks: 7771
+    Total activated: 278037
+    Total used calls: 1390000
+    Policy allow (moved): 644851 (46.4%)
+    Policy deny (not moved): 745149 (53.6%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 556090
+  Total used calls: 2780081
+  Policy allow (moved): 1386270 (49.9%)
+  Policy deny (not moved): 1393811 (50.1%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7761
+    Total activated: 288998
+    Total used calls: 1444800
+    Policy allow (moved): 757483 (52.4%)
+    Policy deny (not moved): 687317 (47.6%)
+  Low priority PID 27053:
+    Current active chunks: 7780
+    Total activated: 288998
+    Total used calls: 1444800
+    Policy allow (moved): 680891 (47.1%)
+    Policy deny (not moved): 763909 (52.9%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 577996
+  Total used calls: 2889600
+  Policy allow (moved): 1438374 (49.8%)
+  Policy deny (not moved): 1451226 (50.2%)
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7761
+    Total activated: 288998
+    Total used calls: 1444800
+    Policy allow (moved): 757483 (52.4%)
+    Policy deny (not moved): 687317 (47.6%)
+  Low priority PID 27053:
+    Current active chunks: 7780
+    Total activated: 288998
+    Total used calls: 1444800
+    Policy allow (moved): 680891 (47.1%)
+    Policy deny (not moved): 763909 (52.9%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 577996
+  Total used calls: 2889600
+  Policy allow (moved): 1438374 (49.8%)
+  Policy deny (not moved): 1451226 (50.2%)
+
+Detaching struct_ops...
+
+=== Per-PID Statistics ===
+  High priority PID 27051:
+    Current active chunks: 7761
+    Total activated: 288998
+    Total used calls: 1444800
+    Policy allow (moved): 757483 (52.4%)
+    Policy deny (not moved): 687317 (47.6%)
+  Low priority PID 27053:
+    Current active chunks: 7780
+    Total activated: 288998
+    Total used calls: 1444800
+    Policy allow (moved): 680891 (47.1%)
+    Policy deny (not moved): 763909 (52.9%)
+
+=== Summary ===
+  Total current chunks: 15541
+  Total activated: 577996
+  Total used calls: 2889600
+  Policy allow (moved): 1438374 (49.8%)
+  Policy deny (not moved): 1451226 (50.2%)

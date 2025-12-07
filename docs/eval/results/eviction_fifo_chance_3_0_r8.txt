@@ -1,0 +1,233 @@
+libbpf: loading object 'eviction_fifo_chance_bpf' from buffer
+libbpf: elf: section(2) .symtab, size 840, link 1, flags 0, type=2
+libbpf: elf: section(3) struct_ops/uvm_pmm_chunk_activate, size 1264, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_chunk_activate': found program 'uvm_pmm_chunk_activate' at insn offset 0 (0 bytes), code size 158 insns (1264 bytes)
+libbpf: elf: section(4) struct_ops/uvm_pmm_chunk_used, size 192, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_chunk_used': found program 'uvm_pmm_chunk_used' at insn offset 0 (0 bytes), code size 24 insns (192 bytes)
+libbpf: elf: section(5) struct_ops/uvm_pmm_eviction_prepare, size 2288, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_eviction_prepare': found program 'uvm_pmm_eviction_prepare' at insn offset 0 (0 bytes), code size 286 insns (2288 bytes)
+libbpf: elf: section(6) license, size 4, link 0, flags 3, type=1
+libbpf: license of eviction_fifo_chance_bpf is GPL
+libbpf: elf: section(7) .struct_ops, size 48, link 0, flags 3, type=1
+libbpf: elf: section(8) .maps, size 96, link 0, flags 3, type=1
+libbpf: elf: section(9) .relstruct_ops/uvm_pmm_chunk_activate, size 144, link 2, flags 40, type=9
+libbpf: elf: section(10) .relstruct_ops/uvm_pmm_chunk_used, size 32, link 2, flags 40, type=9
+libbpf: elf: section(11) .relstruct_ops/uvm_pmm_eviction_prepare, size 416, link 2, flags 40, type=9
+libbpf: elf: section(12) .rel.struct_ops, size 48, link 2, flags 40, type=9
+libbpf: elf: section(13) .BTF, size 39648, link 0, flags 0, type=1
+libbpf: elf: section(14) .BTF.ext, size 3780, link 0, flags 0, type=1
+libbpf: looking for externs among 35 symbols...
+libbpf: collected 1 externs total
+libbpf: extern (ksym) #0: symbol 32, name bpf_uvm_pmm_chunk_move_tail
+libbpf: map 'config': at sec_idx 8, offset 0.
+libbpf: map 'config': found type = 2.
+libbpf: map 'config': found key [8], sz = 4.
+libbpf: map 'config': found value [12], sz = 8.
+libbpf: map 'config': found max_entries = 8.
+libbpf: map 'chunk_states': at sec_idx 8, offset 32.
+libbpf: map 'chunk_states': found type = 1.
+libbpf: map 'chunk_states': found key [12], sz = 8.
+libbpf: map 'chunk_states': found value [22], sz = 8.
+libbpf: map 'chunk_states': found max_entries = 65536.
+libbpf: map 'pid_chunk_count': at sec_idx 8, offset 64.
+libbpf: map 'pid_chunk_count': found type = 1.
+libbpf: map 'pid_chunk_count': found key [8], sz = 4.
+libbpf: map 'pid_chunk_count': found value [31], sz = 40.
+libbpf: map 'pid_chunk_count': found max_entries = 256.
+libbpf: struct_ops init: struct uvm_gpu_ext(type_id=462) uvm_ops_fifo_chance found at offset 0
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': collecting relocation for section(3) 'struct_ops/uvm_pmm_chunk_activate'
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #0: insn #61 against 'chunk_states'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 1 (chunk_states, sec 8, off 32) for insn #61
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #1: insn #70 against 'config'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 0 (config, sec 8, off 0) for insn #70
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #2: insn #80 against 'config'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 0 (config, sec 8, off 0) for insn #80
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #3: insn #92 against 'config'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 0 (config, sec 8, off 0) for insn #92
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #4: insn #105 against 'config'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 0 (config, sec 8, off 0) for insn #105
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #5: insn #115 against 'config'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 0 (config, sec 8, off 0) for insn #115
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #6: insn #130 against 'chunk_states'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 1 (chunk_states, sec 8, off 32) for insn #130
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #7: insn #136 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 2 (pid_chunk_count, sec 8, off 64) for insn #136
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #8: insn #152 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 2 (pid_chunk_count, sec 8, off 64) for insn #152
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': collecting relocation for section(4) 'struct_ops/uvm_pmm_chunk_used'
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #0: insn #4 against 'chunk_states'
+libbpf: prog 'uvm_pmm_chunk_used': found map 1 (chunk_states, sec 8, off 32) for insn #4
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #1: insn #14 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_chunk_used': found map 2 (pid_chunk_count, sec 8, off 64) for insn #14
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': collecting relocation for section(5) 'struct_ops/uvm_pmm_eviction_prepare'
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #0: insn #16 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #16
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #1: insn #27 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_eviction_prepare': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 32) for insn #27
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #2: insn #28 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #28
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #3: insn #49 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #49
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #4: insn #60 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_eviction_prepare': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 32) for insn #60
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #5: insn #61 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #61
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #6: insn #82 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #82
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #7: insn #93 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_eviction_prepare': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 32) for insn #93
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #8: insn #94 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #94
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #9: insn #115 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #115
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #10: insn #126 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_eviction_prepare': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 32) for insn #126
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #11: insn #127 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #127
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #12: insn #148 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #148
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #13: insn #159 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_eviction_prepare': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 32) for insn #159
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #14: insn #160 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #160
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #15: insn #181 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #181
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #16: insn #192 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_eviction_prepare': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 32) for insn #192
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #17: insn #193 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #193
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #18: insn #214 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #214
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #19: insn #225 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_eviction_prepare': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 32) for insn #225
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #20: insn #226 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #226
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #21: insn #247 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #247
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #22: insn #258 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_eviction_prepare': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 32) for insn #258
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #23: insn #259 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #259
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #24: insn #267 against 'pid_chunk_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 2 (pid_chunk_count, sec 8, off 64) for insn #267
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #25: insn #281 against 'chunk_states'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (chunk_states, sec 8, off 32) for insn #281
+libbpf: struct_ops reloc uvm_ops_fifo_chance: for 26 value 0 shdr_idx 3 rel->r_offset 24 map->sec_offset 0 name 334 ('uvm_pmm_chunk_activate')
+libbpf: struct_ops reloc uvm_ops_fifo_chance: for 30 value 0 shdr_idx 4 rel->r_offset 32 map->sec_offset 0 name 393 ('uvm_pmm_chunk_used')
+libbpf: struct_ops reloc uvm_ops_fifo_chance: for 31 value 0 shdr_idx 5 rel->r_offset 40 map->sec_offset 0 name 412 ('uvm_pmm_eviction_prepare')
+libbpf: object 'eviction_fifo_c': failed (-95) to create BPF token from '/sys/fs/bpf', skipping optional step...
+libbpf: loaded kernel BTF from '/sys/kernel/btf/vmlinux'
+libbpf: extern (func ksym) 'bpf_uvm_pmm_chunk_move_tail': resolved to nvidia_uvm [150208]
+libbpf: struct_ops init_kern uvm_ops_fifo_chance: type_id:462 kern_type_id:148506 kern_vtype_id:148521
+libbpf: struct_ops init_kern uvm_ops_fifo_chance: func ptr uvm_pmm_chunk_activate is set to prog uvm_pmm_chunk_activate from data(+24) to kern_data(+24)
+libbpf: struct_ops init_kern uvm_ops_fifo_chance: func ptr uvm_pmm_chunk_used is set to prog uvm_pmm_chunk_used from data(+32) to kern_data(+32)
+libbpf: struct_ops init_kern uvm_ops_fifo_chance: func ptr uvm_pmm_eviction_prepare is set to prog uvm_pmm_eviction_prepare from data(+40) to kern_data(+40)
+libbpf: sec 'struct_ops/uvm_pmm_chunk_activate': found 6 CO-RE relocations
+libbpf: CO-RE relocating [37] typedef uvm_gpu_chunk_t: found target candidate [147854] typedef uvm_gpu_chunk_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: <byte_off> [37] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: matching candidate #0 <byte_off> [147854] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: patched insn #10 (ALU/ALU64) imm 32 -> 32
+libbpf: CO-RE relocating [44] typedef uvm_va_block_t: found target candidate [147900] typedef uvm_va_block_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: <byte_off> [44] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: matching candidate #0 <byte_off> [147900] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: patched insn #18 (ALU/ALU64) imm 40 -> 40
+libbpf: CO-RE relocating [51] typedef uvm_va_range_managed_t: found target candidate [147894] typedef uvm_va_range_managed_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: <byte_off> [51] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: matching candidate #0 <byte_off> [147894] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: patched insn #26 (ALU/ALU64) imm 0 -> 0
+libbpf: CO-RE relocating [61] typedef uvm_va_space_t: found target candidate [147902] typedef uvm_va_space_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: <byte_off> [61] typedef uvm_va_space_t.va_space_mm.mm (0:1:0 @ offset 26688)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: matching candidate #0 <byte_off> [147902] typedef uvm_va_space_t.va_space_mm.mm (0:43:0 @ offset 367864)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: patched insn #34 (ALU/ALU64) imm 26688 -> 367864
+libbpf: CO-RE relocating [67] struct mm_struct: found target candidate [276] struct mm_struct in [vmlinux]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: <byte_off> [67] struct mm_struct.owner (0:0:43 @ offset 1496)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: matching candidate #0 <byte_off> [276] struct mm_struct.owner (0:0:51 @ offset 1176)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: patched insn #42 (ALU/ALU64) imm 1496 -> 1176
+libbpf: CO-RE relocating [183] struct task_struct: found target candidate [115] struct task_struct in [vmlinux]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: <byte_off> [183] struct task_struct.tgid (0:79 @ offset 1404)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: matching candidate #0 <byte_off> [115] struct task_struct.tgid (0:94 @ offset 2772)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: patched insn #50 (ALU/ALU64) imm 1404 -> 2772
+libbpf: sec 'struct_ops/uvm_pmm_eviction_prepare': found 8 CO-RE relocations
+libbpf: CO-RE relocating [41] struct list_head: found target candidate [96] struct list_head in [vmlinux]
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: <byte_off> [41] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: patched insn #2 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #1: <byte_off> [41] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #1: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #1: patched insn #35 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #2: <byte_off> [41] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #2: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #2: patched insn #68 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #3: <byte_off> [41] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #3: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #3: patched insn #101 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #4: <byte_off> [41] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #4: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #4: patched insn #134 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #5: <byte_off> [41] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #5: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #5: patched insn #167 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #6: <byte_off> [41] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #6: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #6: patched insn #200 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #7: <byte_off> [41] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #7: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #7: patched insn #233 (ALU/ALU64) imm 0 -> 0
+libbpf: map 'config': created successfully, fd=3
+libbpf: map 'chunk_states': created successfully, fd=4
+libbpf: map 'pid_chunk_count': created successfully, fd=5
+libbpf: map 'uvm_ops_fifo_chance': created successfully, fd=6
+libbpf: prog 'uvm_pmm_eviction_prepare': BPF program load failed: -EINVAL
+libbpf: prog 'uvm_pmm_eviction_prepare': -- BEGIN PROG LOAD LOG --
+0: R1=ctx() R10=fp0
+; int BPF_PROG(uvm_pmm_eviction_prepare, @ eviction_fifo_chance.bpf.c:159
+0: (79) r6 = *(u64 *)(r1 +8)
+func 'uvm_pmm_eviction_prepare' arg1 has btf_id 96 type STRUCT 'list_head'
+1: R1=ctx() R6_w=trusted_ptr_list_head()
+; if (!va_block_used) @ eviction_fifo_chance.bpf.c:171
+1: (15) if r6 == 0x0 goto pc+282      ; R6_w=trusted_ptr_list_head()
+2: (b7) r1 = 0                        ; R1_w=0
+3: (bf) r3 = r6                       ; R3_w=trusted_ptr_list_head() R6_w=trusted_ptr_list_head()
+4: (0f) r3 += r1                      ; R1_w=0 R3_w=trusted_ptr_list_head()
+5: (bf) r1 = r10                      ; R1_w=fp0 R10=fp0
+;  @ eviction_fifo_chance.bpf.c:0
+6: (07) r1 += -16                     ; R1_w=fp-16
+; first = BPF_CORE_READ(va_block_used, next); @ eviction_fifo_chance.bpf.c:177
+7: (b7) r2 = 8                        ; R2_w=8
+8: (85) call bpf_probe_read_kernel#113        ; R0=scalar() fp-16=mmmmmmmm
+9: (79) r7 = *(u64 *)(r10 -16)        ; R7_w=scalar() R10=fp0 fp-16=mmmmmmmm
+; if (!first || first == va_block_used) @ eviction_fifo_chance.bpf.c:178
+10: (15) if r7 == 0x0 goto pc+273     ; R7_w=scalar(umin=1)
+11: (1d) if r7 == r6 goto pc+272      ; R6=trusted_ptr_list_head() R7_w=scalar(umin=1)
+; chunk = (uvm_gpu_chunk_t *)((char *)first - @ eviction_fifo_chance.bpf.c:181
+12: (07) r7 += -16                    ; R7_w=scalar()
+; chunk_ptr = (u64)chunk; @ eviction_fifo_chance.bpf.c:183
+13: (7b) *(u64 *)(r10 -8) = r7        ; R7_w=scalar(id=1) R10=fp0 fp-8_w=scalar(id=1)
+14: (bf) r2 = r10                     ; R2_w=fp0 R10=fp0
+; chunk = (uvm_gpu_chunk_t *)((char *)first - @ eviction_fifo_chance.bpf.c:181
+15: (07) r2 += -8                     ; R2_w=fp-8
+; state = bpf_map_lookup_elem(&chunk_states, &chunk_ptr); @ eviction_fifo_chance.bpf.c:185
+16: (18) r1 = 0xffff8c31c8596c00      ; R1_w=map_ptr(map=chunk_states,ks=8,vs=8)
+18: (85) call bpf_map_lookup_elem#1   ; R0=map_value_or_null(id=2,map=chunk_states,ks=8,vs=8)
+; if (!state) { @ eviction_fifo_chance.bpf.c:186
+19: (15) if r0 == 0x0 goto pc+264     ; R0=map_value(map=chunk_states,ks=8,vs=8)
+; if (state->chance_count > 0) { @ eviction_fifo_chance.bpf.c:191
+20: (71) r1 = *(u8 *)(r0 +4)          ; R0=map_value(map=chunk_states,ks=8,vs=8) R1_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+21: (15) if r1 == 0x0 goto pc+245     ; R1_w=scalar(smin=umin=smin32=umin32=1,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+; state->chance_count--; @ eviction_fifo_chance.bpf.c:193
+22: (07) r1 += -1                     ; R1_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=254,var_off=(0x0; 0xff))
+23: (73) *(u8 *)(r0 +4) = r1          ; R0=map_value(map=chunk_states,ks=8,vs=8) R1_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=254,var_off=(0x0; 0xff))
+; bpf_uvm_pmm_chunk_move_tail(chunk, va_block_used); @ eviction_fifo_chance.bpf.c:194
+24: (bf) r1 = r7                      ; R1_w=scalar(id=1) R7=scalar(id=1)
+25: (bf) r2 = r6                      ; R2_w=trusted_ptr_list_head() R6=trusted_ptr_list_head()
+26: (bf) r7 = r0                      ; R0=map_value(map=chunk_states,ks=8,vs=8) R7_w=map_value(map=chunk_states,ks=8,vs=8)
+27: (85) call bpf_uvm_pmm_chunk_move_tail#150208
+arg#0 pointer type STRUCT uvm_gpu_chunk_struct must point to scalar, or struct with scalar
+processed 27 insns (limit 1000000) max_states_per_insn 0 total_states 2 peak_states 2 mark_read 1
+-- END PROG LOAD LOG --
+libbpf: prog 'uvm_pmm_eviction_prepare': failed to load: -EINVAL
+libbpf: failed to load object 'eviction_fifo_chance_bpf'
+libbpf: failed to load BPF skeleton 'eviction_fifo_chance_bpf': -EINVAL
+Failed to load BPF skeleton: -22
+Checking for old struct_ops instances...
+No old struct_ops instances found.

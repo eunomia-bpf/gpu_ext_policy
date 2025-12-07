@@ -3,6 +3,10 @@
 Policy Comparison Evaluation Script
 
 Tests different eviction/prefetch policies with uvmbench workloads.
+
+Usage:
+  python run_policy_comparison.py                    # Start fresh
+  python run_policy_comparison.py --resume file.csv # Resume from existing CSV
 """
 
 import subprocess
@@ -12,6 +16,7 @@ import re
 import os
 import signal
 import sys
+import argparse
 from pathlib import Path
 from datetime import datetime
 
@@ -168,7 +173,45 @@ def warmup():
     time.sleep(2)
 
 
+def load_completed_tests(csv_path):
+    """Load completed tests from existing CSV file.
+
+    Returns a set of (policy_name, high_param, low_param, round) tuples.
+    """
+    completed = set()
+    if not csv_path or not Path(csv_path).exists():
+        return completed
+
+    with open(csv_path, 'r') as f:
+        lines = f.readlines()
+
+    # Skip header
+    for line in lines[1:]:
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(',')
+        if len(parts) >= 7:
+            policy = parts[0]
+            high_param = int(parts[1])
+            low_param = int(parts[2])
+            round_num = int(parts[7]) if len(parts) > 7 else int(parts[6])
+            completed.add((policy, high_param, low_param, round_num))
+
+    return completed
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description='Policy Comparison Evaluation')
+    parser.add_argument('--resume', type=str, default=None,
+                        help='Path to existing CSV file to resume from')
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
     # Check uvmbench exists
     if not UVM.exists():
         print(f"Error: {UVM} not found")
@@ -177,9 +220,23 @@ def main():
     # Create output directory
     OUT.mkdir(parents=True, exist_ok=True)
 
-    # Create CSV file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = OUT / f"policy_comparison_{timestamp}.csv"
+    # Handle resume mode
+    completed_tests = set()
+    if args.resume:
+        resume_path = Path(args.resume)
+        if not resume_path.exists():
+            print(f"Error: Resume file not found: {args.resume}")
+            sys.exit(1)
+        completed_tests = load_completed_tests(resume_path)
+        csv_path = resume_path
+        print(f"Resuming from: {csv_path}")
+        print(f"Found {len(completed_tests)} completed tests")
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_path = OUT / f"policy_comparison_{timestamp}.csv"
+        # Write CSV header for new file
+        with open(csv_path, 'w') as f:
+            f.write("policy,high_param,low_param,high_median_ms,high_bw_gbps,low_median_ms,low_bw_gbps,round\n")
 
     print("=" * 60)
     print("Policy Comparison Evaluation")
@@ -187,9 +244,15 @@ def main():
     print(f"Output: {csv_path}")
     print()
 
-    # Write CSV header
-    with open(csv_path, 'w') as f:
-        f.write("policy,high_param,low_param,high_median_ms,high_bw_gbps,low_median_ms,low_bw_gbps,round\n")
+    # Count remaining tests
+    remaining = 0
+    for policy_name, policy_binary, configs in POLICIES:
+        for high_param, low_param in configs:
+            for round_idx in range(NUM_ROUNDS):
+                if (policy_name, high_param, low_param, round_idx + 1) not in completed_tests:
+                    remaining += 1
+    print(f"Remaining tests: {remaining}")
+    print()
 
     # Warmup
     warmup()
@@ -200,6 +263,11 @@ def main():
     for policy_name, policy_binary, configs in POLICIES:
         for high_param, low_param in configs:
             for round_idx in range(NUM_ROUNDS):
+                # Skip completed tests
+                if (policy_name, high_param, low_param, round_idx + 1) in completed_tests:
+                    print(f"=== SKIP {policy_name} {high_param}/{low_param} R{round_idx+1} (already done) ===")
+                    continue
+
                 exp_name = f"{policy_name} {high_param}/{low_param} R{round_idx+1}"
                 print(f"=== {exp_name} ===")
 
@@ -233,10 +301,30 @@ def main():
     print("SUMMARY")
     print("=" * 60)
 
-    # Group by policy and config
+    # Load all results from CSV for summary (including previously completed)
     from collections import defaultdict
+    all_results = []
+    with open(csv_path, 'r') as f:
+        lines = f.readlines()
+    for line in lines[1:]:
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(',')
+        if len(parts) >= 7:
+            all_results.append({
+                'policy': parts[0],
+                'high_param': int(parts[1]),
+                'low_param': int(parts[2]),
+                'high_median_ms': float(parts[3]),
+                'high_bw_gbps': float(parts[4]),
+                'low_median_ms': float(parts[5]),
+                'low_bw_gbps': float(parts[6]),
+            })
+
+    # Group by policy and config
     grouped = defaultdict(list)
-    for r in results:
+    for r in all_results:
         key = (r['policy'], r['high_param'], r['low_param'])
         grouped[key].append(r)
 

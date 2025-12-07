@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
     printf("Successfully loaded and attached BPF directional prefetch policy!\n");
     printf("Direction: %s\n", direction == PREFETCH_FORWARD ? "FORWARD (prefetch higher addresses)" : "BACKWARD (prefetch lower addresses)");
     printf("Num pages: %u %s\n", num_pages, num_pages == 0 ? "(all available)" : "");
-    printf("Monitor dmesg for BPF debug output.\n");
+    printf("Monitor tracepipe for BPF debug output.\n");
     printf("\nPress Ctrl-C to exit and detach the policy...\n");
 
     /* Wait for signal */
