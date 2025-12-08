@@ -1,0 +1,316 @@
+libbpf: loading object 'prefetch_eviction_pid_bpf' from buffer
+libbpf: elf: section(2) .symtab, size 1512, link 1, flags 0, type=2
+libbpf: elf: section(3) kprobe/uvm_perf_prefetch_get_hint_va_block, size 432, link 0, flags 6, type=1
+libbpf: sec 'kprobe/uvm_perf_prefetch_get_hint_va_block': found program 'prefetch_get_hint_va_block' at insn offset 0 (0 bytes), code size 54 insns (432 bytes)
+libbpf: elf: section(4) struct_ops/uvm_prefetch_before_compute, size 584, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_prefetch_before_compute': found program 'uvm_prefetch_before_compute' at insn offset 0 (0 bytes), code size 73 insns (584 bytes)
+libbpf: elf: section(5) struct_ops/uvm_prefetch_on_tree_iter, size 1192, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_prefetch_on_tree_iter': found program 'uvm_prefetch_on_tree_iter' at insn offset 0 (0 bytes), code size 149 insns (1192 bytes)
+libbpf: elf: section(6) struct_ops/uvm_pmm_chunk_activate, size 768, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_chunk_activate': found program 'uvm_pmm_chunk_activate' at insn offset 0 (0 bytes), code size 96 insns (768 bytes)
+libbpf: elf: section(7) struct_ops/uvm_pmm_chunk_used, size 1392, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_chunk_used': found program 'uvm_pmm_chunk_used' at insn offset 0 (0 bytes), code size 174 insns (1392 bytes)
+libbpf: elf: section(8) struct_ops/uvm_pmm_eviction_prepare, size 336, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_pmm_eviction_prepare': found program 'uvm_pmm_eviction_prepare' at insn offset 0 (0 bytes), code size 42 insns (336 bytes)
+libbpf: elf: section(9) struct_ops/uvm_bpf_test_trigger_kfunc, size 16, link 0, flags 6, type=1
+libbpf: sec 'struct_ops/uvm_bpf_test_trigger_kfunc': found program 'uvm_bpf_test_trigger_kfunc' at insn offset 0 (0 bytes), code size 2 insns (16 bytes)
+libbpf: elf: section(10) license, size 4, link 0, flags 3, type=1
+libbpf: license of prefetch_eviction_pid_bpf is GPL
+libbpf: elf: section(11) .struct_ops, size 48, link 0, flags 3, type=1
+libbpf: elf: section(12) .maps, size 160, link 0, flags 3, type=1
+libbpf: elf: section(13) .rodata, size 123, link 0, flags 2, type=1
+libbpf: elf: section(14) .relkprobe/uvm_perf_prefetch_get_hint_va_block, size 16, link 2, flags 40, type=9
+libbpf: elf: section(15) .relstruct_ops/uvm_prefetch_before_compute, size 128, link 2, flags 40, type=9
+libbpf: elf: section(16) .relstruct_ops/uvm_prefetch_on_tree_iter, size 144, link 2, flags 40, type=9
+libbpf: elf: section(17) .relstruct_ops/uvm_pmm_chunk_activate, size 64, link 2, flags 40, type=9
+libbpf: elf: section(18) .relstruct_ops/uvm_pmm_chunk_used, size 160, link 2, flags 40, type=9
+libbpf: elf: section(19) .relstruct_ops/uvm_pmm_eviction_prepare, size 64, link 2, flags 40, type=9
+libbpf: elf: section(20) .rel.struct_ops, size 96, link 2, flags 40, type=9
+libbpf: elf: section(21) .BTF, size 42243, link 0, flags 0, type=1
+libbpf: elf: section(22) .BTF.ext, size 4156, link 0, flags 0, type=1
+libbpf: looking for externs among 63 symbols...
+libbpf: collected 2 externs total
+libbpf: extern (ksym) #0: symbol 58, name bpf_uvm_pmm_chunk_move_tail
+libbpf: extern (ksym) #1: symbol 51, name bpf_uvm_set_va_block_region
+libbpf: map 'config': at sec_idx 12, offset 0.
+libbpf: map 'config': found type = 2.
+libbpf: map 'config': found key [8], sz = 4.
+libbpf: map 'config': found value [12], sz = 8.
+libbpf: map 'config': found max_entries = 8.
+libbpf: map 'pid_stats': at sec_idx 12, offset 32.
+libbpf: map 'pid_stats': found type = 1.
+libbpf: map 'pid_stats': found key [8], sz = 4.
+libbpf: map 'pid_stats': found value [22], sz = 40.
+libbpf: map 'pid_stats': found max_entries = 1024.
+libbpf: map 'va_block_pid_cache': at sec_idx 12, offset 64.
+libbpf: map 'va_block_pid_cache': found type = 6.
+libbpf: map 'va_block_pid_cache': found key [8], sz = 4.
+libbpf: map 'va_block_pid_cache': found value [8], sz = 4.
+libbpf: map 'va_block_pid_cache': found max_entries = 1.
+libbpf: map 'active_chunks': at sec_idx 12, offset 96.
+libbpf: map 'active_chunks': found type = 1.
+libbpf: map 'active_chunks': found key [12], sz = 8.
+libbpf: map 'active_chunks': found value [8], sz = 4.
+libbpf: map 'active_chunks': found max_entries = 65536.
+libbpf: map 'chunk_access_count': at sec_idx 12, offset 128.
+libbpf: map 'chunk_access_count': found type = 1.
+libbpf: map 'chunk_access_count': found key [12], sz = 8.
+libbpf: map 'chunk_access_count': found value [12], sz = 8.
+libbpf: map 'chunk_access_count': found max_entries = 65536.
+libbpf: map 'prefetch.rodata' (global data): at sec_idx 13, offset 0, flags 80.
+libbpf: map 5 is "prefetch.rodata"
+libbpf: struct_ops init: struct uvm_gpu_ext(type_id=478) uvm_ops_prefetch_eviction_pid found at offset 0
+libbpf: sec '.relkprobe/uvm_perf_prefetch_get_hint_va_block': collecting relocation for section(3) 'kprobe/uvm_perf_prefetch_get_hint_va_block'
+libbpf: sec '.relkprobe/uvm_perf_prefetch_get_hint_va_block': relo #0: insn #5 against 'va_block_pid_cache'
+libbpf: prog 'prefetch_get_hint_va_block': found map 2 (va_block_pid_cache, sec 12, off 64) for insn #5
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': collecting relocation for section(4) 'struct_ops/uvm_prefetch_before_compute'
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': relo #0: insn #7 against 'va_block_pid_cache'
+libbpf: prog 'uvm_prefetch_before_compute': found map 2 (va_block_pid_cache, sec 12, off 64) for insn #7
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': relo #1: insn #16 against 'config'
+libbpf: prog 'uvm_prefetch_before_compute': found map 0 (config, sec 12, off 0) for insn #16
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': relo #2: insn #23 against 'config'
+libbpf: prog 'uvm_prefetch_before_compute': found map 0 (config, sec 12, off 0) for insn #23
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': relo #3: insn #35 against 'config'
+libbpf: prog 'uvm_prefetch_before_compute': found map 0 (config, sec 12, off 0) for insn #35
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': relo #4: insn #42 against 'config'
+libbpf: prog 'uvm_prefetch_before_compute': found map 0 (config, sec 12, off 0) for insn #42
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': relo #5: insn #54 against 'config'
+libbpf: prog 'uvm_prefetch_before_compute': found map 0 (config, sec 12, off 0) for insn #54
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': relo #6: insn #61 against '.rodata'
+libbpf: prog 'uvm_prefetch_before_compute': found data map 5 (prefetch.rodata, sec 13, off 0) for insn 61
+libbpf: sec '.relstruct_ops/uvm_prefetch_before_compute': relo #7: insn #70 against 'bpf_uvm_set_va_block_region'
+libbpf: prog 'uvm_prefetch_before_compute': found extern #1 'bpf_uvm_set_va_block_region' (sym 51) for insn #70
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': collecting relocation for section(5) 'struct_ops/uvm_prefetch_on_tree_iter'
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #0: insn #8 against 'va_block_pid_cache'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found map 2 (va_block_pid_cache, sec 12, off 64) for insn #8
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #1: insn #18 against 'config'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found map 0 (config, sec 12, off 0) for insn #18
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #2: insn #25 against 'config'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found map 0 (config, sec 12, off 0) for insn #25
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #3: insn #38 against 'config'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found map 0 (config, sec 12, off 0) for insn #38
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #4: insn #45 against 'config'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found map 0 (config, sec 12, off 0) for insn #45
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #5: insn #58 against 'config'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found map 0 (config, sec 12, off 0) for insn #58
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #6: insn #97 against 'pid_stats'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found map 1 (pid_stats, sec 12, off 32) for insn #97
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #7: insn #119 against 'pid_stats'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found map 1 (pid_stats, sec 12, off 32) for insn #119
+libbpf: sec '.relstruct_ops/uvm_prefetch_on_tree_iter': relo #8: insn #146 against 'bpf_uvm_set_va_block_region'
+libbpf: prog 'uvm_prefetch_on_tree_iter': found extern #1 'bpf_uvm_set_va_block_region' (sym 51) for insn #146
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': collecting relocation for section(6) 'struct_ops/uvm_pmm_chunk_activate'
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #0: insn #60 against 'active_chunks'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 3 (active_chunks, sec 12, off 96) for insn #60
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #1: insn #68 against 'active_chunks'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 3 (active_chunks, sec 12, off 96) for insn #68
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #2: insn #73 against 'pid_stats'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 1 (pid_stats, sec 12, off 32) for insn #73
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_activate': relo #3: insn #90 against 'pid_stats'
+libbpf: prog 'uvm_pmm_chunk_activate': found map 1 (pid_stats, sec 12, off 32) for insn #90
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': collecting relocation for section(7) 'struct_ops/uvm_pmm_chunk_used'
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #0: insn #57 against 'pid_stats'
+libbpf: prog 'uvm_pmm_chunk_used': found map 1 (pid_stats, sec 12, off 32) for insn #57
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #1: insn #69 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 12, off 0) for insn #69
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #2: insn #79 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 12, off 0) for insn #79
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #3: insn #93 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 12, off 0) for insn #93
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #4: insn #107 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 12, off 0) for insn #107
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #5: insn #117 against 'config'
+libbpf: prog 'uvm_pmm_chunk_used': found map 0 (config, sec 12, off 0) for insn #117
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #6: insn #130 against 'chunk_access_count'
+libbpf: prog 'uvm_pmm_chunk_used': found map 4 (chunk_access_count, sec 12, off 128) for insn #130
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #7: insn #144 against 'chunk_access_count'
+libbpf: prog 'uvm_pmm_chunk_used': found map 4 (chunk_access_count, sec 12, off 128) for insn #144
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #8: insn #153 against 'bpf_uvm_pmm_chunk_move_tail'
+libbpf: prog 'uvm_pmm_chunk_used': found extern #0 'bpf_uvm_pmm_chunk_move_tail' (sym 58) for insn #153
+libbpf: sec '.relstruct_ops/uvm_pmm_chunk_used': relo #9: insn #159 against '.rodata'
+libbpf: prog 'uvm_pmm_chunk_used': found data map 5 (prefetch.rodata, sec 13, off 0) for insn 159
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': collecting relocation for section(8) 'struct_ops/uvm_pmm_eviction_prepare'
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #0: insn #16 against 'active_chunks'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 3 (active_chunks, sec 12, off 96) for insn #16
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #1: insn #20 against 'pid_stats'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 1 (pid_stats, sec 12, off 32) for insn #20
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #2: insn #32 against 'active_chunks'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 3 (active_chunks, sec 12, off 96) for insn #32
+libbpf: sec '.relstruct_ops/uvm_pmm_eviction_prepare': relo #3: insn #36 against 'chunk_access_count'
+libbpf: prog 'uvm_pmm_eviction_prepare': found map 4 (chunk_access_count, sec 12, off 128) for insn #36
+libbpf: struct_ops reloc uvm_ops_prefetch_eviction_pid: for 60 value 0 shdr_idx 9 rel->r_offset 0 map->sec_offset 0 name 947 ('uvm_bpf_test_trigger_kfunc')
+libbpf: struct_ops reloc uvm_ops_prefetch_eviction_pid: for 49 value 0 shdr_idx 4 rel->r_offset 8 map->sec_offset 0 name 720 ('uvm_prefetch_before_compute')
+libbpf: struct_ops reloc uvm_ops_prefetch_eviction_pid: for 52 value 0 shdr_idx 5 rel->r_offset 16 map->sec_offset 0 name 783 ('uvm_prefetch_on_tree_iter')
+libbpf: struct_ops reloc uvm_ops_prefetch_eviction_pid: for 54 value 0 shdr_idx 6 rel->r_offset 24 map->sec_offset 0 name 819 ('uvm_pmm_chunk_activate')
+libbpf: struct_ops reloc uvm_ops_prefetch_eviction_pid: for 56 value 0 shdr_idx 7 rel->r_offset 32 map->sec_offset 0 name 856 ('uvm_pmm_chunk_used')
+libbpf: struct_ops reloc uvm_ops_prefetch_eviction_pid: for 59 value 0 shdr_idx 8 rel->r_offset 40 map->sec_offset 0 name 922 ('uvm_pmm_eviction_prepare')
+libbpf: object 'prefetch_evicti': failed (-95) to create BPF token from '/sys/fs/bpf', skipping optional step...
+libbpf: loaded kernel BTF from '/sys/kernel/btf/vmlinux'
+libbpf: extern (func ksym) 'bpf_uvm_pmm_chunk_move_tail': resolved to nvidia_uvm [150208]
+libbpf: extern (func ksym) 'bpf_uvm_set_va_block_region': resolved to nvidia_uvm [150211]
+libbpf: struct_ops init_kern uvm_ops_prefetch_eviction_pid: type_id:478 kern_type_id:148506 kern_vtype_id:148521
+libbpf: struct_ops init_kern uvm_ops_prefetch_eviction_pid: func ptr uvm_bpf_test_trigger_kfunc is set to prog uvm_bpf_test_trigger_kfunc from data(+0) to kern_data(+0)
+libbpf: struct_ops init_kern uvm_ops_prefetch_eviction_pid: func ptr uvm_prefetch_before_compute is set to prog uvm_prefetch_before_compute from data(+8) to kern_data(+8)
+libbpf: struct_ops init_kern uvm_ops_prefetch_eviction_pid: func ptr uvm_prefetch_on_tree_iter is set to prog uvm_prefetch_on_tree_iter from data(+16) to kern_data(+16)
+libbpf: struct_ops init_kern uvm_ops_prefetch_eviction_pid: func ptr uvm_pmm_chunk_activate is set to prog uvm_pmm_chunk_activate from data(+24) to kern_data(+24)
+libbpf: struct_ops init_kern uvm_ops_prefetch_eviction_pid: func ptr uvm_pmm_chunk_used is set to prog uvm_pmm_chunk_used from data(+32) to kern_data(+32)
+libbpf: struct_ops init_kern uvm_ops_prefetch_eviction_pid: func ptr uvm_pmm_eviction_prepare is set to prog uvm_pmm_eviction_prepare from data(+40) to kern_data(+40)
+libbpf: sec 'kprobe/uvm_perf_prefetch_get_hint_va_block': found 6 CO-RE relocations
+libbpf: CO-RE relocating [36] struct pt_regs: found target candidate [185] struct pt_regs in [vmlinux]
+libbpf: prog 'prefetch_get_hint_va_block': relo #0: <byte_off> [36] struct pt_regs.di (0:14 @ offset 112)
+libbpf: prog 'prefetch_get_hint_va_block': relo #0: matching candidate #0 <byte_off> [185] struct pt_regs.di (0:14 @ offset 112)
+libbpf: prog 'prefetch_get_hint_va_block': relo #0: patched insn #0 (LDX/ST/STX) off 112 -> 112
+libbpf: CO-RE relocating [40] typedef uvm_va_block_t: found target candidate [147900] typedef uvm_va_block_t in [nvidia_uvm]
+libbpf: prog 'prefetch_get_hint_va_block': relo #1: <byte_off> [40] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'prefetch_get_hint_va_block': relo #1: matching candidate #0 <byte_off> [147900] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'prefetch_get_hint_va_block': relo #1: patched insn #11 (ALU/ALU64) imm 40 -> 40
+libbpf: CO-RE relocating [46] typedef uvm_va_range_managed_t: found target candidate [147894] typedef uvm_va_range_managed_t in [nvidia_uvm]
+libbpf: prog 'prefetch_get_hint_va_block': relo #2: <byte_off> [46] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'prefetch_get_hint_va_block': relo #2: matching candidate #0 <byte_off> [147894] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'prefetch_get_hint_va_block': relo #2: patched insn #20 (ALU/ALU64) imm 0 -> 0
+libbpf: CO-RE relocating [58] typedef uvm_va_space_t: found target candidate [147902] typedef uvm_va_space_t in [nvidia_uvm]
+libbpf: prog 'prefetch_get_hint_va_block': relo #3: <byte_off> [58] typedef uvm_va_space_t.va_space_mm.mm (0:1:0 @ offset 26688)
+libbpf: prog 'prefetch_get_hint_va_block': relo #3: matching candidate #0 <byte_off> [147902] typedef uvm_va_space_t.va_space_mm.mm (0:43:0 @ offset 367864)
+libbpf: prog 'prefetch_get_hint_va_block': relo #3: patched insn #28 (ALU/ALU64) imm 26688 -> 367864
+libbpf: CO-RE relocating [64] struct mm_struct: found target candidate [276] struct mm_struct in [vmlinux]
+libbpf: prog 'prefetch_get_hint_va_block': relo #4: <byte_off> [64] struct mm_struct.owner (0:0:43 @ offset 1496)
+libbpf: prog 'prefetch_get_hint_va_block': relo #4: matching candidate #0 <byte_off> [276] struct mm_struct.owner (0:0:51 @ offset 1176)
+libbpf: prog 'prefetch_get_hint_va_block': relo #4: patched insn #36 (ALU/ALU64) imm 1496 -> 1176
+libbpf: CO-RE relocating [184] struct task_struct: found target candidate [115] struct task_struct in [vmlinux]
+libbpf: prog 'prefetch_get_hint_va_block': relo #5: <byte_off> [184] struct task_struct.tgid (0:79 @ offset 1404)
+libbpf: prog 'prefetch_get_hint_va_block': relo #5: matching candidate #0 <byte_off> [115] struct task_struct.tgid (0:94 @ offset 2772)
+libbpf: prog 'prefetch_get_hint_va_block': relo #5: patched insn #44 (ALU/ALU64) imm 1404 -> 2772
+libbpf: sec 'struct_ops/uvm_prefetch_on_tree_iter': found 2 CO-RE relocations
+libbpf: CO-RE relocating [459] typedef uvm_va_block_region_t: found target candidate [148133] typedef uvm_va_block_region_t in [nvidia_uvm]
+libbpf: prog 'uvm_prefetch_on_tree_iter': relo #0: <byte_off> [459] typedef uvm_va_block_region_t.first (0:0 @ offset 0)
+libbpf: prog 'uvm_prefetch_on_tree_iter': relo #0: matching candidate #0 <byte_off> [148133] typedef uvm_va_block_region_t.first (0:0 @ offset 0)
+libbpf: prog 'uvm_prefetch_on_tree_iter': relo #0: patched insn #64 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_prefetch_on_tree_iter': relo #1: <byte_off> [459] typedef uvm_va_block_region_t.outer (0:1 @ offset 2)
+libbpf: prog 'uvm_prefetch_on_tree_iter': relo #1: matching candidate #0 <byte_off> [148133] typedef uvm_va_block_region_t.outer (0:1 @ offset 2)
+libbpf: prog 'uvm_prefetch_on_tree_iter': relo #1: patched insn #71 (ALU/ALU64) imm 2 -> 2
+libbpf: sec 'struct_ops/uvm_pmm_chunk_activate': found 6 CO-RE relocations
+libbpf: CO-RE relocating [466] typedef uvm_gpu_chunk_t: found target candidate [147854] typedef uvm_gpu_chunk_t in [nvidia_uvm]
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: <byte_off> [466] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: matching candidate #0 <byte_off> [147854] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #0: patched insn #9 (ALU/ALU64) imm 32 -> 32
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: <byte_off> [40] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: matching candidate #0 <byte_off> [147900] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #1: patched insn #17 (ALU/ALU64) imm 40 -> 40
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: <byte_off> [46] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: matching candidate #0 <byte_off> [147894] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #2: patched insn #25 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: <byte_off> [58] typedef uvm_va_space_t.va_space_mm.mm (0:1:0 @ offset 26688)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: matching candidate #0 <byte_off> [147902] typedef uvm_va_space_t.va_space_mm.mm (0:43:0 @ offset 367864)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #3: patched insn #33 (ALU/ALU64) imm 26688 -> 367864
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: <byte_off> [64] struct mm_struct.owner (0:0:43 @ offset 1496)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: matching candidate #0 <byte_off> [276] struct mm_struct.owner (0:0:51 @ offset 1176)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #4: patched insn #41 (ALU/ALU64) imm 1496 -> 1176
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: <byte_off> [184] struct task_struct.tgid (0:79 @ offset 1404)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: matching candidate #0 <byte_off> [115] struct task_struct.tgid (0:94 @ offset 2772)
+libbpf: prog 'uvm_pmm_chunk_activate': relo #5: patched insn #49 (ALU/ALU64) imm 1404 -> 2772
+libbpf: sec 'struct_ops/uvm_pmm_chunk_used': found 6 CO-RE relocations
+libbpf: prog 'uvm_pmm_chunk_used': relo #0: <byte_off> [466] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_used': relo #0: matching candidate #0 <byte_off> [147854] typedef uvm_gpu_chunk_t.va_block (0:3 @ offset 32)
+libbpf: prog 'uvm_pmm_chunk_used': relo #0: patched insn #5 (ALU/ALU64) imm 32 -> 32
+libbpf: prog 'uvm_pmm_chunk_used': relo #1: <byte_off> [40] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_used': relo #1: matching candidate #0 <byte_off> [147900] typedef uvm_va_block_t.managed_range (0:2 @ offset 40)
+libbpf: prog 'uvm_pmm_chunk_used': relo #1: patched insn #14 (ALU/ALU64) imm 40 -> 40
+libbpf: prog 'uvm_pmm_chunk_used': relo #2: <byte_off> [46] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_used': relo #2: matching candidate #0 <byte_off> [147894] typedef uvm_va_range_managed_t.va_range.va_space (0:0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_chunk_used': relo #2: patched insn #22 (ALU/ALU64) imm 0 -> 0
+libbpf: prog 'uvm_pmm_chunk_used': relo #3: <byte_off> [58] typedef uvm_va_space_t.va_space_mm.mm (0:1:0 @ offset 26688)
+libbpf: prog 'uvm_pmm_chunk_used': relo #3: matching candidate #0 <byte_off> [147902] typedef uvm_va_space_t.va_space_mm.mm (0:43:0 @ offset 367864)
+libbpf: prog 'uvm_pmm_chunk_used': relo #3: patched insn #30 (ALU/ALU64) imm 26688 -> 367864
+libbpf: prog 'uvm_pmm_chunk_used': relo #4: <byte_off> [64] struct mm_struct.owner (0:0:43 @ offset 1496)
+libbpf: prog 'uvm_pmm_chunk_used': relo #4: matching candidate #0 <byte_off> [276] struct mm_struct.owner (0:0:51 @ offset 1176)
+libbpf: prog 'uvm_pmm_chunk_used': relo #4: patched insn #38 (ALU/ALU64) imm 1496 -> 1176
+libbpf: prog 'uvm_pmm_chunk_used': relo #5: <byte_off> [184] struct task_struct.tgid (0:79 @ offset 1404)
+libbpf: prog 'uvm_pmm_chunk_used': relo #5: matching candidate #0 <byte_off> [115] struct task_struct.tgid (0:94 @ offset 2772)
+libbpf: prog 'uvm_pmm_chunk_used': relo #5: patched insn #46 (ALU/ALU64) imm 1404 -> 2772
+libbpf: sec 'struct_ops/uvm_pmm_eviction_prepare': found 1 CO-RE relocations
+libbpf: CO-RE relocating [90] struct list_head: found target candidate [96] struct list_head in [vmlinux]
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: <byte_off> [90] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: matching candidate #0 <byte_off> [96] struct list_head.next (0:0 @ offset 0)
+libbpf: prog 'uvm_pmm_eviction_prepare': relo #0: patched insn #2 (ALU/ALU64) imm 0 -> 0
+libbpf: map 'config': created successfully, fd=3
+libbpf: map 'pid_stats': created successfully, fd=4
+libbpf: map 'va_block_pid_cache': created successfully, fd=5
+libbpf: map 'active_chunks': created successfully, fd=6
+libbpf: map 'chunk_access_count': created successfully, fd=7
+libbpf: map 'prefetch.rodata': created successfully, fd=8
+libbpf: map 'uvm_ops_prefetch_eviction_pid': created successfully, fd=9
+Checking for old struct_ops instances...
+No old struct_ops instances found.
+Successfully loaded combined prefetch + eviction policy!
+
+Configuration (param: prefetch threshold + eviction decay):
+  High priority PID: 526482 (param: 20, decay: 2)
+  Low priority PID:  526483 (param: 80, decay: 8)
+  Default param:     50 (decay: 5)
+
+Press Ctrl-C to exit...
+
+=== Per-PID Statistics ===
+  High priority PID 526482:
+    Current active chunks: 8114
+    Total activated: 1344783
+    Total used calls: 4071
+    Policy allow (moved): 1156321 (86.2%)
+    Policy deny (not moved): 184419 (13.8%)
+  Low priority PID 526483:
+    Current active chunks: 6549
+    Total activated: 9930069
+    Total used calls: 22099
+    Policy allow (moved): 7305982 (73.5%)
+    Policy deny (not moved): 2639637 (26.5%)
+
+=== Summary ===
+  Total current chunks: 14663
+  Total activated: 11274852
+  Total used calls: 26170
+  Policy allow (moved): 8462303 (75.0%)
+  Policy deny (not moved): 2824056 (25.0%)
+
+=== Per-PID Statistics ===
+  High priority PID 526482:
+    Current active chunks: 8114
+    Total activated: 1344783
+    Total used calls: 4071
+    Policy allow (moved): 1156321 (86.2%)
+    Policy deny (not moved): 184419 (13.8%)
+  Low priority PID 526483:
+    Current active chunks: 6772
+    Total activated: 12453685
+    Total used calls: 28659
+    Policy allow (moved): 9199636 (73.7%)
+    Policy deny (not moved): 3275936 (26.3%)
+
+=== Summary ===
+  Total current chunks: 14886
+  Total activated: 13798468
+  Total used calls: 32730
+  Policy allow (moved): 10355957 (75.0%)
+  Policy deny (not moved): 3460355 (25.0%)
+
+Detaching struct_ops...
+
+=== Per-PID Statistics ===
+  High priority PID 526482:
+    Current active chunks: 8114
+    Total activated: 1344783
+    Total used calls: 4071
+    Policy allow (moved): 1156321 (86.2%)
+    Policy deny (not moved): 184419 (13.8%)
+  Low priority PID 526483:
+    Current active chunks: 6772
+    Total activated: 12453685
+    Total used calls: 28659
+    Policy allow (moved): 9199636 (73.7%)
+    Policy deny (not moved): 3275936 (26.3%)
+
+=== Summary ===
+  Total current chunks: 14886
+  Total activated: 13798468
+  Total used calls: 32730
+  Policy allow (moved): 10355957 (75.0%)
+  Policy deny (not moved): 3460355 (25.0%)
