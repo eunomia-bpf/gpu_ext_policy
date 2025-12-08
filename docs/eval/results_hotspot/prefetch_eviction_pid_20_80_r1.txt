@@ -244,157 +244,136 @@ No old struct_ops instances found.
 Successfully loaded combined prefetch + eviction policy!
 
 Configuration (param: prefetch threshold + eviction decay):
-  High priority PID: 520818 (param: 20, decay: 2)
-  Low priority PID:  520819 (param: 80, decay: 8)
+  High priority PID: 39485 (param: 20, decay: 2)
+  Low priority PID:  39486 (param: 80, decay: 8)
   Default param:     50 (decay: 5)
 
 Press Ctrl-C to exit...
 
 === Per-PID Statistics ===
-  High priority PID 520818:
-    Current active chunks: 8442
-    Total activated: 1855735
-    Total used calls: 9511
-    Policy allow (moved): 1644538 (88.7%)
-    Policy deny (not moved): 208482 (11.3%)
-  Low priority PID 520819:
-    Current active chunks: 7098
-    Total activated: 10108738
-    Total used calls: 63136
-    Policy allow (moved): 7338059 (72.2%)
-    Policy deny (not moved): 2825473 (27.8%)
+  High priority PID 39485:
+    Current active chunks: 8556
+    Total activated: 1785371
+    Total used calls: 9310
+    Policy allow (moved): 1581715 (88.7%)
+    Policy deny (not moved): 201044 (11.3%)
+  Low priority PID 39486:
+    Current active chunks: 6992
+    Total activated: 9995192
+    Total used calls: 62026
+    Policy allow (moved): 7265232 (72.3%)
+    Policy deny (not moved): 2783800 (27.7%)
 
 === Summary ===
-  Total current chunks: 15540
-  Total activated: 11964473
-  Total used calls: 72647
-  Policy allow (moved): 8982597 (74.8%)
-  Policy deny (not moved): 3033955 (25.2%)
+  Total current chunks: 15548
+  Total activated: 11780563
+  Total used calls: 71336
+  Policy allow (moved): 8846947 (74.8%)
+  Policy deny (not moved): 2984844 (25.2%)
 
 === Per-PID Statistics ===
-  High priority PID 520818:
-    Current active chunks: 8825
-    Total activated: 2486305
-    Total used calls: 14056
-    Policy allow (moved): 2186607 (88.2%)
-    Policy deny (not moved): 293808 (11.8%)
-  Low priority PID 520819:
-    Current active chunks: 6715
-    Total activated: 14476402
-    Total used calls: 99107
-    Policy allow (moved): 10052592 (69.0%)
-    Policy deny (not moved): 4508834 (31.0%)
+  High priority PID 39485:
+    Current active chunks: 8766
+    Total activated: 2397689
+    Total used calls: 13664
+    Policy allow (moved): 2108233 (88.1%)
+    Policy deny (not moved): 283710 (11.9%)
+  Low priority PID 39486:
+    Current active chunks: 6781
+    Total activated: 14431438
+    Total used calls: 97547
+    Policy allow (moved): 10057206 (69.3%)
+    Policy deny (not moved): 4457950 (30.7%)
 
 === Summary ===
-  Total current chunks: 15540
-  Total activated: 16962707
-  Total used calls: 113163
-  Policy allow (moved): 12239199 (71.8%)
-  Policy deny (not moved): 4802642 (28.2%)
+  Total current chunks: 15547
+  Total activated: 16829127
+  Total used calls: 111211
+  Policy allow (moved): 12165439 (72.0%)
+  Policy deny (not moved): 4741660 (28.0%)
 
 === Per-PID Statistics ===
-  High priority PID 520818:
-    Current active chunks: 9321
-    Total activated: 3459167
-    Total used calls: 20284
-    Policy allow (moved): 3027556 (87.8%)
-    Policy deny (not moved): 420079 (12.2%)
-  Low priority PID 520819:
-    Current active chunks: 6219
-    Total activated: 18928434
-    Total used calls: 151263
-    Policy allow (moved): 12519048 (65.7%)
-    Policy deny (not moved): 6538323 (34.3%)
+  High priority PID 39485:
+    Current active chunks: 9276
+    Total activated: 3348925
+    Total used calls: 19806
+    Policy allow (moved): 2929648 (87.8%)
+    Policy deny (not moved): 408099 (12.2%)
+  Low priority PID 39486:
+    Current active chunks: 6271
+    Total activated: 18769348
+    Total used calls: 148850
+    Policy allow (moved): 12460924 (65.9%)
+    Policy deny (not moved): 6435354 (34.1%)
 
 === Summary ===
-  Total current chunks: 15540
-  Total activated: 22387601
-  Total used calls: 171547
-  Policy allow (moved): 15546604 (69.1%)
-  Policy deny (not moved): 6958402 (30.9%)
+  Total current chunks: 15547
+  Total activated: 22118273
+  Total used calls: 168656
+  Policy allow (moved): 15390572 (69.2%)
+  Policy deny (not moved): 6843453 (30.8%)
 
 === Per-PID Statistics ===
-  High priority PID 520818:
-    Current active chunks: 9344
-    Total activated: 4530083
-    Total used calls: 27578
-    Policy allow (moved): 3950952 (87.5%)
-    Policy deny (not moved): 561939 (12.5%)
-  Low priority PID 520819:
-    Current active chunks: 6196
-    Total activated: 23569238
-    Total used calls: 206048
-    Policy allow (moved): 15087493 (63.5%)
-    Policy deny (not moved): 8656822 (36.5%)
+  High priority PID 39485:
+    Current active chunks: 9269
+    Total activated: 4393846
+    Total used calls: 26857
+    Policy allow (moved): 3831147 (87.5%)
+    Policy deny (not moved): 545783 (12.5%)
+  Low priority PID 39486:
+    Current active chunks: 6279
+    Total activated: 23454079
+    Total used calls: 203674
+    Policy allow (moved): 15057409 (63.7%)
+    Policy deny (not moved): 8569762 (36.3%)
 
 === Summary ===
-  Total current chunks: 15540
-  Total activated: 28099321
-  Total used calls: 233626
-  Policy allow (moved): 19038445 (67.4%)
-  Policy deny (not moved): 9218761 (32.6%)
+  Total current chunks: 15548
+  Total activated: 27847925
+  Total used calls: 230531
+  Policy allow (moved): 18888556 (67.4%)
+  Policy deny (not moved): 9115545 (32.6%)
 
 === Per-PID Statistics ===
-  High priority PID 520818:
-    Current active chunks: 9217
-    Total activated: 5482231
-    Total used calls: 34248
-    Policy allow (moved): 4770465 (87.4%)
-    Policy deny (not moved): 689628 (12.6%)
-  Low priority PID 520819:
-    Current active chunks: 6573
-    Total activated: 28969434
-    Total used calls: 270252
-    Policy allow (moved): 18091326 (62.0%)
-    Policy deny (not moved): 11109172 (38.0%)
+  High priority PID 39485:
+    Current active chunks: 9345
+    Total activated: 4795883
+    Total used calls: 29582
+    Policy allow (moved): 4177556 (87.5%)
+    Policy deny (not moved): 599229 (12.5%)
+  Low priority PID 39486:
+    Current active chunks: 6453
+    Total activated: 26924085
+    Total used calls: 246081
+    Policy allow (moved): 16998353 (62.6%)
+    Policy deny (not moved): 10137685 (37.4%)
 
 === Summary ===
-  Total current chunks: 15790
-  Total activated: 34451665
-  Total used calls: 304500
-  Policy allow (moved): 22861791 (66.0%)
-  Policy deny (not moved): 11798800 (34.0%)
-
-=== Per-PID Statistics ===
-  High priority PID 520818:
-    Current active chunks: 9217
-    Total activated: 5482231
-    Total used calls: 34248
-    Policy allow (moved): 4770465 (87.4%)
-    Policy deny (not moved): 689628 (12.6%)
-  Low priority PID 520819:
-    Current active chunks: 6573
-    Total activated: 29500844
-    Total used calls: 276261
-    Policy allow (moved): 18393437 (61.9%)
-    Policy deny (not moved): 11344480 (38.1%)
-
-=== Summary ===
-  Total current chunks: 15790
-  Total activated: 34983075
-  Total used calls: 310509
-  Policy allow (moved): 23163902 (65.8%)
-  Policy deny (not moved): 12034108 (34.2%)
+  Total current chunks: 15798
+  Total activated: 31719968
+  Total used calls: 275663
+  Policy allow (moved): 21175909 (66.4%)
+  Policy deny (not moved): 10736914 (33.6%)
 
 Detaching struct_ops...
 
 === Per-PID Statistics ===
-  High priority PID 520818:
-    Current active chunks: 9217
-    Total activated: 5482231
-    Total used calls: 34248
-    Policy allow (moved): 4770465 (87.4%)
-    Policy deny (not moved): 689628 (12.6%)
-  Low priority PID 520819:
-    Current active chunks: 6573
-    Total activated: 29500844
-    Total used calls: 276261
-    Policy allow (moved): 18393437 (61.9%)
-    Policy deny (not moved): 11344480 (38.1%)
+  High priority PID 39485:
+    Current active chunks: 9345
+    Total activated: 4795883
+    Total used calls: 29582
+    Policy allow (moved): 4177556 (87.5%)
+    Policy deny (not moved): 599229 (12.5%)
+  Low priority PID 39486:
+    Current active chunks: 6453
+    Total activated: 26924085
+    Total used calls: 246081
+    Policy allow (moved): 16998353 (62.6%)
+    Policy deny (not moved): 10137685 (37.4%)
 
 === Summary ===
-  Total current chunks: 15790
-  Total activated: 34983075
-  Total used calls: 310509
-  Policy allow (moved): 23163902 (65.8%)
-  Policy deny (not moved): 12034108 (34.2%)
+  Total current chunks: 15798
+  Total activated: 31719968
+  Total used calls: 275663
+  Policy allow (moved): 21175909 (66.4%)
+  Policy deny (not moved): 10736914 (33.6%)

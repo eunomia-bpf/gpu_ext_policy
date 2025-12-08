@@ -10,9 +10,9 @@ Usage:
   python run_policy_comparison.py --output results_gemm     # Custom output directory
 
 Example configurations:
-  python run_policy_comparison.py --kernel hotspot --size-factor 0.6 --output results_hotspot
-  python run_policy_comparison.py --kernel gemm --size-factor 0.6 --output results_gemm
-  python run_policy_comparison.py --kernel kmeans_sparse --size-factor 0.9 --output results_kmeans
+  sudo python run_policy_comparison.py --kernel hotspot --size-factor 0.6 --output results_hotspot
+  sudo python run_policy_comparison.py --kernel gemm --size-factor 0.6 --output results_gemm
+  sudo python run_policy_comparison.py --kernel kmeans_sparse --size-factor 0.9 --output results_kmeans
 """
 
 import subprocess
@@ -49,10 +49,10 @@ POLICIES = [
     # ("eviction_fifo_chance", "eviction_fifo_chance", [(0, 0), (3, 0), (5, 0), (8, 1)]),
     # ("eviction_fifo_chance", "eviction_fifo_chance", [(0, 0), (5, 0)]),
     # eviction_freq_pid_decay: -P = high decay (1=always protected), -L = low decay (larger=less protected)
-    ("eviction_freq_pid_decay", "eviction_freq_pid_decay", [(1, 1), (1, 10), (1, 5)]),
+    ("eviction_freq_pid_decay", "eviction_freq_pid_decay", [(1, 1), (1, 10)]),
     # ("eviction_freq_pid_decay", "eviction_freq_pid_decay", [(1, 1), (1, 10)]),
-    ("prefetch_pid_tree", "prefetch_pid_tree", [(0, 0), (50, 50), (20, 80), (0, 40), (40, 40), (60, 60), (80, 80)]),
-    # ("prefetch_pid_tree", "prefetch_pid_tree", [(20, 80)]),
+    # ("prefetch_pid_tree", "prefetch_pid_tree", [(0, 0), (50, 50), (20, 80), (0, 40), (40, 40), (60, 60), (80, 80)]),
+    ("prefetch_pid_tree", "prefetch_pid_tree", [(0, 0), (0, 20), (20, 80)]),
     # ("prefetch_pid_tree", "prefetch_pid_tree", [(20, 80)]),
     ("prefetch_eviction_pid", "prefetch_eviction_pid", [(20, 80)]),
 ]
