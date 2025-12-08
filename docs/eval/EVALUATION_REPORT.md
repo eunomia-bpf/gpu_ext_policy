@@ -12,9 +12,9 @@
 - **有效的优先级划分**：高优先级进程比低优先级进程快 6-19% 完成
 - **接近理论最优**：最佳配置下 K-Means 从 85.5s 降至 6.6s，接近 2×Single 1x 理论下限（3.9s × 2 ≈ 7.8s）
 
-**Prefetch vs Eviction 策略对比**：两种策略效果几乎相同（差异 <1%），说明在当前 workload 下 prefetch 控制是主要优化手段，eviction 策略在内存压力更大的场景可能展现额外优势。
+**Memory Policy vs Scheduler Policy**：我们在同样的 workload 上对比了 GPU Scheduler Timeslice 策略，发现 Scheduler 策略对 memory-bound workload **完全无效**（改进 <1%），而 Memory Policy 改进 55-92%。原因是 Scheduler 控制 GPU 计算时间，但瓶颈在 UVM page fault；Memory Policy 直接控制 prefetch/eviction，解决真正的瓶颈。
 
-**理论分析**：Single 1x 表示单进程独占 GPU 的理想时间；2×Single 1x 表示顺序执行两个相同工作量的理论最优时间，是多租户并发场景的下限。无策略时总时间远超 2×Single 1x（因 thrashing 导致），而我们的策略使总时间接近 2×Single 1x，证明有效消除了内存竞争带来的额外开销。
+**理论分析**：Single 1x 表示单进程独占 GPU 的理想时间；2×Single 1x 表示顺序执行两个相同工作量的理论最优时间。无策略时总时间远超 2×Single 1x（因 thrashing 导致），而我们的策略使总时间接近 2×Single 1x，证明有效消除了内存竞争带来的额外开销。
 
 ---
 
@@ -121,7 +121,32 @@
 | **GEMM** | 78% | 计算密集但内存访问规律，策略有效减少竞争 |
 | **Hotspot** | 56% | 热点访问，局部性强，改进空间相对较小 |
 
-### 3.4 Prefetch vs Eviction 策略对比
+### 3.4 Memory Policy vs Scheduler Policy 对比
+
+**核心问题**：为什么不用 Scheduler Timeslice 策略来实现优先级划分？
+
+我们在同样的 workload 上测试了 GPU Scheduler Timeslice 策略（High=1s, Low=200µs）：
+
+| Kernel | No Policy | Scheduler | Memory | Mem+Evict |
+|--------|-----------|-----------|--------|-----------|
+| Hotspot | 53.9s | 53.8s (**+0.3%**) | 24.0s (**+55.5%**) | 23.9s (**+55.7%**) |
+| GEMM | 135.8s | 136.5s (**-0.6%**) | 29.6s (**+78.2%**) | 29.7s (**+78.1%**) |
+| K-Means | 85.5s | 85.7s (**-0.3%**) | 6.7s (**+92.2%**) | 6.6s (**+92.3%**) |
+
+**关键发现**：Scheduler Timeslice 策略对 memory-bound workload **完全无效**！
+
+**原因分析**：
+1. **Scheduler 控制 GPU SM 计算时间**，但瓶颈在 UVM page fault
+2. **进程在等待内存**，不是在等待 GPU 计算资源
+3. 给 High priority 更多 timeslice 没用，因为大部分时间在等 page fault
+4. Memory Policy 直接控制 prefetch/eviction，解决真正的瓶颈
+
+**结论**：
+- **Compute-bound workload** → Scheduler Policy 有效
+- **Memory-bound workload** → Memory Policy 必需
+- 两种策略解决不同层面的问题，不能互相替代
+
+### 3.5 Prefetch vs Eviction 策略对比
 
 | 策略 | 机制 | 作用时机 |
 |------|------|----------|
@@ -135,7 +160,7 @@
 2. **内存压力未达极限**：实验中 GPU 内存尚未完全耗尽，eviction 策略的优势未充分体现
 3. **Eviction 的潜在价值**：在内存压力更大（如更多租户、更大工作集）的场景下，eviction 策略可通过保护高优先级进程的 working set 提供额外收益
 
-### 3.5 与单进程运行的理论对比
+### 3.6 与单进程运行的理论对比
 
 | 基准 | 含义 | 计算方式 |
 |------|------|----------|

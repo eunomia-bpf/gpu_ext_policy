@@ -311,7 +311,7 @@ def plot_main_result():
                     color=colors, alpha=0.8, edgecolor='black', linewidth=1)
     ax1.set_xticks(x)
     ax1.set_xticklabels(['Native', 'BPF Policy'])
-    ax1.set_ylabel('Per-run P99 (µs)')
+    ax1.set_ylabel('Launch Latency (µs)')
     ax1.grid(True, alpha=0.3, axis='y')
     ax1.set_ylim(0, native_mean * 1.15)
 
@@ -321,7 +321,7 @@ def plot_main_result():
     ax1.text(1, policy_mean * 1.5, f'{policy_mean:.0f}',
              ha='center', va='bottom', fontsize=14)
 
-    ax1.set_title(f'(a) LC P99 Latency  [-{reduction:.0f}%]')
+    ax1.set_title(f'(a) LC P99 Launch Latency  [-{reduction:.0f}%]')
 
     # Panel (b): BE Throughput - Bar chart
     native_tput = native_be_tput  # Already a single value

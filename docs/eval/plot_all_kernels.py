@@ -24,12 +24,13 @@ plt.rcParams.update({
     'figure.dpi': 150,
 })
 
-# Selected configurations to plot
+# Selected configurations to plot (policy, high_param, low_param, label, is_sched)
 SELECTED_CONFIGS = [
-    ('no_policy', None, None, 'No Policy'),
-    ('prefetch_pid_tree', 0, 20, 'Prefetch(0,20)'),
-    ('prefetch_pid_tree', 20, 80, 'Prefetch(20,80)'),
-    ('prefetch_eviction_pid', 20, 80, 'Evict(20,80)'),
+    ('no_policy', None, None, 'No Policy', False),
+    ('sched_timeslice', 1000000, 200, 'Scheduler', True),
+    ('prefetch_pid_tree', 0, 20, 'Prefetch(0,20)', False),
+    ('prefetch_pid_tree', 20, 80, 'Prefetch(20,80)', False),
+    ('prefetch_eviction_pid', 20, 80, 'Evict(20,80)', False),
 ]
 
 
@@ -39,16 +40,19 @@ def load_data(csv_path):
     return df
 
 
-def get_selected_rows(df):
+def get_selected_rows(df, sched_df=None):
     """Filter dataframe to only selected configurations."""
     rows = []
-    for policy, hp, lp, label in SELECTED_CONFIGS:
+    for policy, hp, lp, label, is_sched in SELECTED_CONFIGS:
+        source_df = sched_df if is_sched and sched_df is not None else df
+        if source_df is None:
+            continue
         if policy == 'no_policy':
-            row = df[df['policy'] == 'no_policy']
+            row = source_df[source_df['policy'] == 'no_policy']
         else:
-            row = df[(df['policy'] == policy) &
-                     (df['high_param'] == hp) &
-                     (df['low_param'] == lp)]
+            row = source_df[(source_df['policy'] == policy) &
+                     (source_df['high_param'] == hp) &
+                     (source_df['low_param'] == lp)]
         if len(row) > 0:
             r = row.iloc[0].to_dict()
             r['label'] = label
@@ -56,7 +60,7 @@ def get_selected_rows(df):
     return rows
 
 
-def print_improvements(data):
+def print_improvements(data, sched_data):
     """Print improvement ratios compared to no_policy."""
     print("\n" + "=" * 80)
     print("IMPROVEMENT RATIOS (vs No Policy)")
@@ -64,7 +68,8 @@ def print_improvements(data):
 
     for kernel_name, df in data.items():
         print(f"\n### {kernel_name} ###")
-        rows = get_selected_rows(df)
+        sched_df = sched_data.get(kernel_name)
+        rows = get_selected_rows(df, sched_df)
 
         # Find no_policy baseline
         baseline = None
@@ -97,9 +102,9 @@ def print_improvements(data):
                   f"{high_impr:>+10.1f}% {low_impr:>+10.1f}% {total_impr:>+10.1f}%")
 
 
-def plot_kernel_subplot(ax, df, kernel_name):
+def plot_kernel_subplot(ax, df, kernel_name, sched_df=None):
     """Plot a single kernel's data on the given axes."""
-    rows = get_selected_rows(df)
+    rows = get_selected_rows(df, sched_df)
 
     if not rows:
         ax.set_title(f"{kernel_name} (No Data)")
@@ -162,19 +167,29 @@ def main():
         data[kernel_name] = load_data(csv_path)
         print(f"Loaded {kernel_name}: {csv_path}")
 
+    # Load scheduler data
+    sched_data = {}
+    for kernel_name, result_dir in kernels:
+        csv_files = list(result_dir.glob('sched_comparison_*.csv'))
+        if csv_files:
+            csv_path = max(csv_files, key=lambda p: p.stat().st_mtime)
+            sched_data[kernel_name] = load_data(csv_path)
+            print(f"Loaded Scheduler - {kernel_name}: {csv_path}")
+
     if not data:
         print("Error: No data loaded")
         return
 
     # Print improvement ratios
-    print_improvements(data)
+    print_improvements(data, sched_data)
 
     # Create figure with 3 subplots
     fig, axes = plt.subplots(1, 3, figsize=(20, 7))
 
     # Plot each kernel
     for idx, (kernel_name, df) in enumerate(data.items()):
-        plot_kernel_subplot(axes[idx], df, kernel_name)
+        sched_df = sched_data.get(kernel_name)
+        plot_kernel_subplot(axes[idx], df, kernel_name, sched_df)
 
     # Add legend only to the first subplot (or use a shared legend)
     handles, labels = axes[0].get_legend_handles_labels()
