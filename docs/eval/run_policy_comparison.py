@@ -5,8 +5,14 @@ Policy Comparison Evaluation Script
 Tests different eviction/prefetch policies with uvmbench workloads.
 
 Usage:
-  python run_policy_comparison.py                    # Start fresh
-  python run_policy_comparison.py --resume file.csv # Resume from existing CSV
+  python run_policy_comparison.py                           # Default: hotspot, size_factor=0.6
+  python run_policy_comparison.py --resume file.csv         # Resume from existing CSV
+  python run_policy_comparison.py --output results_gemm     # Custom output directory
+
+Example configurations:
+  python run_policy_comparison.py --kernel hotspot --size-factor 0.6 --output results_hotspot
+  python run_policy_comparison.py --kernel gemm --size-factor 0.6 --output results_gemm
+  python run_policy_comparison.py --kernel kmeans_sparse --size-factor 0.9 --output results_kmeans
 """
 
 import subprocess
@@ -24,47 +30,38 @@ from datetime import datetime
 BASE_DIR = Path("/home/yunwei37/workspace/gpu/co-processor-demo/gpu_ext_policy")
 SRC = BASE_DIR / "src"
 UVM = BASE_DIR / "microbench" / "memory" / "uvmbench"
-OUT = Path(__file__).parent / "results"
+DEFAULT_OUTPUT_DIR = Path(__file__).parent / "results"
 
-# Benchmark parameters
-# SIZE_FACTOR = 0.6
+# Benchmark parameters (defaults, can be overridden via command line)
+DEFAULT_SIZE_FACTOR = 0.6
+DEFAULT_KERNEL = "hotspot"
 ITERATIONS = 1
-# KERNEL = "rand_stream"
-# KERNEL = "seq_stream"
-
-SIZE_FACTOR = 0.6
-KERNEL = "hotspot"
-
-# SIZE_FACTOR = 0.6
-# KERNEL = "gemm"
-
-# SIZE_FACTOR = 0.9
-# KERNEL = "kmeans_sparse"
-
 NUM_ROUNDS = 1
+
+# Available kernels: rand_stream, seq_stream, hotspot, gemm, kmeans_sparse
 
 # Policy configurations to test
 POLICIES = [
     # (policy_name, policy_binary, configs)
     # configs = [(high_param, low_param), ...]
-    # ("no_policy", None, [(50, 50)]),
+    ("no_policy", None, [(50, 50)]),
     # ("eviction_pid_quota", "eviction_pid_quota", [(50, 50), (80, 20), (90, 10)]),
     # ("eviction_fifo_chance", "eviction_fifo_chance", [(0, 0), (3, 0), (5, 0), (8, 1)]),
     # ("eviction_fifo_chance", "eviction_fifo_chance", [(0, 0), (5, 0)]),
     # eviction_freq_pid_decay: -P = high decay (1=always protected), -L = low decay (larger=less protected)
-    # ("eviction_freq_pid_decay", "eviction_freq_pid_decay", [(1, 1), (1, 10), (1, 5)]),
+    ("eviction_freq_pid_decay", "eviction_freq_pid_decay", [(1, 1), (1, 10), (1, 5)]),
     # ("eviction_freq_pid_decay", "eviction_freq_pid_decay", [(1, 1), (1, 10)]),
-    # ("prefetch_pid_tree", "prefetch_pid_tree", [(0, 0), (50, 50), (20, 80), (0, 40), (40, 40), (60, 60), (80, 80)]),
+    ("prefetch_pid_tree", "prefetch_pid_tree", [(0, 0), (50, 50), (20, 80), (0, 40), (40, 40), (60, 60), (80, 80)]),
     # ("prefetch_pid_tree", "prefetch_pid_tree", [(20, 80)]),
-    ("prefetch_pid_tree", "prefetch_pid_tree", [(20, 80)]),
+    # ("prefetch_pid_tree", "prefetch_pid_tree", [(20, 80)]),
     ("prefetch_eviction_pid", "prefetch_eviction_pid", [(20, 80)]),
 ]
 
 # Single process configurations (no policy needed)
 # (config_name, size_factor_multiplier)
 SINGLE_PROCESS_CONFIGS = [
-    # ("single_1x", 1),      # SIZE_FACTOR * 1
-    # ("single_2x", 2),      # SIZE_FACTOR * 2
+    ("single_1x", 1),      # SIZE_FACTOR * 1
+    ("single_2x", 2),      # SIZE_FACTOR * 2
 ]
 
 
@@ -78,16 +75,14 @@ def cleanup_processes():
     time.sleep(1)
 
 
-def run_uvmbench(output_file, size_factor=None):
+def run_uvmbench(output_file, size_factor, kernel):
     """Start a uvmbench process."""
-    if size_factor is None:
-        size_factor = SIZE_FACTOR
     cmd = [
         str(UVM),
         f"--size_factor={size_factor}",
         "--mode=uvm",
         f"--iterations={ITERATIONS}",
-        f"--kernel={KERNEL}",
+        f"--kernel={kernel}",
     ]
     with open(output_file, 'w') as f:
         proc = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT)
@@ -118,7 +113,7 @@ def parse_uvmbench_output(output_file):
     return median_ms, bw_gbps
 
 
-def run_experiment(policy_name, policy_binary, high_param, low_param, round_idx):
+def run_experiment(policy_name, policy_binary, high_param, low_param, round_idx, size_factor, kernel):
     """Run a single experiment with the given policy configuration."""
 
     cleanup_processes()
@@ -137,8 +132,8 @@ def run_experiment(policy_name, policy_binary, high_param, low_param, round_idx)
         start_time = time.time()
 
         # Start both uvmbench processes
-        high_proc = run_uvmbench(high_output.name)
-        low_proc = run_uvmbench(low_output.name)
+        high_proc = run_uvmbench(high_output.name, size_factor, kernel)
+        low_proc = run_uvmbench(low_output.name, size_factor, kernel)
 
         # Start policy process if needed
         if policy_binary:
@@ -210,7 +205,7 @@ def run_experiment(policy_name, policy_binary, high_param, low_param, round_idx)
         os.unlink(low_output.name)
 
 
-def run_single_experiment(config_name, size_multiplier, round_idx):
+def run_single_experiment(config_name, size_multiplier, round_idx, size_factor, kernel):
     """Run a single process experiment without any policy."""
 
     cleanup_processes()
@@ -221,13 +216,13 @@ def run_single_experiment(config_name, size_multiplier, round_idx):
 
     try:
         # Calculate actual size factor
-        actual_size_factor = SIZE_FACTOR * size_multiplier
+        actual_size_factor = size_factor * size_multiplier
 
         # Record start time
         start_time = time.time()
 
         # Start single uvmbench process
-        proc = run_uvmbench(output.name, size_factor=actual_size_factor)
+        proc = run_uvmbench(output.name, actual_size_factor, kernel)
 
         # Wait for uvmbench to complete
         proc.wait()
@@ -254,15 +249,15 @@ def run_single_experiment(config_name, size_multiplier, round_idx):
         os.unlink(output.name)
 
 
-def warmup():
+def warmup(size_factor, kernel):
     """Run warmup iteration."""
     print("=== WARMUP ===")
     cmd = [
         str(UVM),
-        f"--size_factor={SIZE_FACTOR}",
+        f"--size_factor={size_factor}",
         "--mode=uvm",
         "--iterations=2",
-        f"--kernel={KERNEL}",
+        f"--kernel={kernel}",
     ]
     subprocess.run(cmd, capture_output=True)
     time.sleep(2)
@@ -302,6 +297,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Policy Comparison Evaluation')
     parser.add_argument('--resume', type=str, default=None,
                         help='Path to existing CSV file to resume from')
+    parser.add_argument('--size-factor', type=float, default=DEFAULT_SIZE_FACTOR,
+                        help=f'Size factor for uvmbench (default: {DEFAULT_SIZE_FACTOR})')
+    parser.add_argument('--kernel', type=str, default=DEFAULT_KERNEL,
+                        choices=['rand_stream', 'seq_stream', 'hotspot', 'gemm', 'kmeans_sparse'],
+                        help=f'Kernel to run (default: {DEFAULT_KERNEL})')
+    parser.add_argument('--output', '-o', type=str, default=None,
+                        help=f'Output directory for results (default: results)')
     return parser.parse_args()
 
 
@@ -313,8 +315,16 @@ def main():
         print(f"Error: {UVM} not found")
         sys.exit(1)
 
+    # Determine output directory
+    if args.output:
+        output_dir = Path(args.output)
+        if not output_dir.is_absolute():
+            output_dir = Path(__file__).parent / output_dir
+    else:
+        output_dir = DEFAULT_OUTPUT_DIR
+
     # Create output directory
-    OUT.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Handle resume mode
     completed_tests = set()
@@ -334,9 +344,14 @@ def main():
         with open(csv_path, 'w') as f:
             f.write("policy,high_param,low_param,high_median_ms,high_bw_gbps,high_latency_s,high_throughput,low_median_ms,low_bw_gbps,low_latency_s,low_throughput,round\n")
 
+    # Get configuration from args
+    size_factor = args.size_factor
+    kernel = args.kernel
+
     print("=" * 60)
     print("Policy Comparison Evaluation")
     print("=" * 60)
+    print(f"Kernel: {kernel}, Size Factor: {size_factor}")
     print(f"Output: {csv_path}")
     print()
 
@@ -357,7 +372,7 @@ def main():
     print()
 
     # Warmup
-    warmup()
+    warmup(size_factor, kernel)
 
     # Run all experiments
     results = []
@@ -370,10 +385,10 @@ def main():
                 print(f"=== SKIP {config_name} R{round_idx+1} (already done) ===")
                 continue
 
-            exp_name = f"{config_name} (size={SIZE_FACTOR * size_multiplier}) R{round_idx+1}"
+            exp_name = f"{config_name} (size={size_factor * size_multiplier}) R{round_idx+1}"
             print(f"=== {exp_name} ===")
 
-            result = run_single_experiment(config_name, size_multiplier, round_idx)
+            result = run_single_experiment(config_name, size_multiplier, round_idx, size_factor, kernel)
 
             # Print result
             print(f"  {result['median_ms']:.2f}ms {result['bw_gbps']:.2f}GB/s "
@@ -413,7 +428,7 @@ def main():
                 exp_name = f"{policy_name} {high_param}/{low_param} R{round_idx+1}"
                 print(f"=== {exp_name} ===")
 
-                result = run_experiment(policy_name, policy_binary, high_param, low_param, round_idx)
+                result = run_experiment(policy_name, policy_binary, high_param, low_param, round_idx, size_factor, kernel)
 
                 # Print result
                 print(f"  H:{result['high_median_ms']:.2f}ms {result['high_bw_gbps']:.2f}GB/s "
