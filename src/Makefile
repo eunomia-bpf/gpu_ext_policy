@@ -21,7 +21,7 @@ INCLUDES := -I$(OUTPUT) -I../libbpf/include/uapi -I$(dir $(VMLINUX)) -I/usr/loca
 CFLAGS := -g -Wall
 ALL_LDFLAGS := $(LDFLAGS) $(EXTRA_LDFLAGS)
 
-BPF_APPS = struct_ops prefetch_always_max prefetch_none prefetch_adaptive_tree_iter prefetch_adaptive_sequential prefetch_direction prefetch_pid_tree eviction_fifo eviction_lfu eviction_mru eviction_pid_quota eviction_freq_pid_decay eviction_fifo_chance chunk_trace prefetch_trace gpu_sched_trace gpu_preempt_ctrl gpu_sched_set_timeslices # BPF apps that need skeletons
+BPF_APPS = struct_ops prefetch_always_max prefetch_none prefetch_adaptive_tree_iter prefetch_adaptive_sequential prefetch_direction prefetch_pid_tree prefetch_eviction_pid eviction_fifo eviction_lfu eviction_mru eviction_pid_quota eviction_freq_pid_decay eviction_fifo_chance chunk_trace prefetch_trace gpu_sched_trace gpu_preempt_ctrl gpu_sched_set_timeslices # BPF apps that need skeletons
 TOOL_APPS = cleanup_struct_ops_tool # Pure userspace tools
 APPS = $(BPF_APPS) $(TOOL_APPS) # minimal minimal_legacy uprobe kprobe fentry usdt sockfilter tc ksyscall
 

@@ -32,14 +32,14 @@ ITERATIONS = 1
 # KERNEL = "rand_stream"
 # KERNEL = "seq_stream"
 
-# SIZE_FACTOR = 0.6
-# KERNEL = "hotspot"
+SIZE_FACTOR = 0.6
+KERNEL = "hotspot"
 
 # SIZE_FACTOR = 0.6
 # KERNEL = "gemm"
 
-SIZE_FACTOR = 0.9
-KERNEL = "kmeans_sparse"
+# SIZE_FACTOR = 0.9
+# KERNEL = "kmeans_sparse"
 
 NUM_ROUNDS = 1
 
@@ -50,16 +50,20 @@ POLICIES = [
     # ("no_policy", None, [(50, 50)]),
     # ("eviction_pid_quota", "eviction_pid_quota", [(50, 50), (80, 20), (90, 10)]),
     # ("eviction_fifo_chance", "eviction_fifo_chance", [(0, 0), (3, 0), (5, 0), (8, 1)]),
+    # ("eviction_fifo_chance", "eviction_fifo_chance", [(0, 0), (5, 0)]),
     # eviction_freq_pid_decay: -P = high decay (1=always protected), -L = low decay (larger=less protected)
     # ("eviction_freq_pid_decay", "eviction_freq_pid_decay", [(1, 1), (1, 10), (1, 5)]),
-    # ("prefetch_pid_tree", "prefetch_pid_tree", [(0, 0), (50, 50), (20, 80), (0, 20), (0, 40), (40, 40), (60, 60), (80, 80)]),
+    # ("eviction_freq_pid_decay", "eviction_freq_pid_decay", [(1, 1), (1, 10)]),
+    # ("prefetch_pid_tree", "prefetch_pid_tree", [(0, 0), (50, 50), (20, 80), (0, 40), (40, 40), (60, 60), (80, 80)]),
+    # ("prefetch_pid_tree", "prefetch_pid_tree", [(20, 80)]),
     ("prefetch_pid_tree", "prefetch_pid_tree", [(20, 80)]),
+    ("prefetch_eviction_pid", "prefetch_eviction_pid", [(20, 80)]),
 ]
 
 # Single process configurations (no policy needed)
 # (config_name, size_factor_multiplier)
 SINGLE_PROCESS_CONFIGS = [
-    ("single_1x", 1),      # SIZE_FACTOR * 1
+    # ("single_1x", 1),      # SIZE_FACTOR * 1
     # ("single_2x", 2),      # SIZE_FACTOR * 2
 ]
 

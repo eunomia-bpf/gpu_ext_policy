@@ -9,6 +9,7 @@ ecc
 .output
 struct_ops
 prefetch_always_max
+prefetch_eviction_pid
 prefetch_none
 prefetch_adaptive_tree_iter
 prefetch_adaptive_sequential
