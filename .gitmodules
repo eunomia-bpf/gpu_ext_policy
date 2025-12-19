@@ -4,3 +4,6 @@
 [submodule "bpftool"]
 	path = bpftool
 	url = https://github.com/libbpf/bpftool.git
+[submodule "kernel-module/nvidia-module"]
+	path = kernel-module/nvidia-module
+	url = https://github.com/eunomia-bpf/gpu_ext-kernel-modules
