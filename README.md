@@ -2,6 +2,8 @@
 
 Extending Linux GPU drivers with eBPF for programmable memory offloading and scheduling.
 
+> WIP, not ready yet!
+
 ## Overview
 
 Modern GPU workloads (LLM inference, vector databases, DNN training) exhibit diverse memory access patterns and scheduling requirements. However, GPU drivers use fixed, one-size-fits-all policies that cannot adapt to workload-specific needs.
