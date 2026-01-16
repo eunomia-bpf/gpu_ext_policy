@@ -1,0 +1,18 @@
+# Compiled binaries
+01_thread_divergence
+02_memory_access
+03_atomic_contention
+04_deadlock
+
+# Object files
+*.o
+
+# CUDA compiled files
+*.cubin
+*.fatbin
+*.ptx
+
+# Editor files
+*.swp
+*~
+.vscode/
