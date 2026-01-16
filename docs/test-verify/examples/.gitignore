@@ -3,6 +3,7 @@
 02_memory_access
 03_atomic_contention
 04_deadlock
+05_map_bandwidth_contention
 
 # Object files
 *.o

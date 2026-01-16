@@ -12,7 +12,8 @@ endif
 EXAMPLES := 01_thread_divergence \
             02_memory_access \
             03_atomic_contention \
-            04_deadlock
+            04_deadlock \
+            05_map_bandwidth_contention
 
 all: check_cuda $(EXAMPLES)
 
@@ -33,6 +34,9 @@ check_cuda:
 04_deadlock: 04_deadlock.cu
 	$(NVCC) $(NVCC_FLAGS) -o $@ $<
 
+05_map_bandwidth_contention: 05_map_bandwidth_contention.cu
+	$(NVCC) $(NVCC_FLAGS) -o $@ $<
+
 run: all
 	@echo "════════════════════════════════════════════════════════════════"
 	@echo ""
@@ -49,6 +53,10 @@ run: all
 	@echo "════════════════════════════════════════════════════════════════"
 	@echo ""
 	./04_deadlock
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════"
+	@echo ""
+	./05_map_bandwidth_contention
 
 run1: 01_thread_divergence
 	./01_thread_divergence
@@ -62,7 +70,10 @@ run3: 03_atomic_contention
 run4: 04_deadlock
 	./04_deadlock
 
+run5: 05_map_bandwidth_contention
+	./05_map_bandwidth_contention
+
 clean:
 	rm -f $(EXAMPLES)
 
-.PHONY: all check_cuda run run1 run2 run3 run4 clean
+.PHONY: all check_cuda run run1 run2 run3 run4 run5 clean
