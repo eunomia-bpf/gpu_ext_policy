@@ -21,8 +21,8 @@ INCLUDES := -I$(OUTPUT) -I../libbpf/include/uapi -I$(dir $(VMLINUX)) -I/usr/loca
 CFLAGS := -g -Wall
 ALL_LDFLAGS := $(LDFLAGS) $(EXTRA_LDFLAGS)
 
-BPF_APPS = cuda_launch_trace cuda_sched_trace # BPF apps that need skeletons
-TOOL_APPS = cleanup_struct_ops_tool # Pure userspace tools
+BPF_APPS = cuda_sched_trace # BPF apps that need skeletons
+TOOL_APPS = # Pure userspace tools
 APPS = $(BPF_APPS) $(TOOL_APPS) # minimal minimal_legacy uprobe kprobe fentry usdt sockfilter tc ksyscall
 
 CARGO ?= $(shell which cargo)

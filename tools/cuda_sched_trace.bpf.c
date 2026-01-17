@@ -46,6 +46,16 @@ struct {
 #define STAT_SYNC_EXIT 3
 #define STAT_SCHED_SWITCH 4
 #define STAT_DROPPED 5
+#define STAT_HARDIRQ 6
+#define STAT_SOFTIRQ 7
+
+// Per-CPU storage for IRQ entry timestamps
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u64);
+} irq_start SEC(".maps");
 
 static __always_inline void inc_stat(__u32 key)
 {
@@ -293,6 +303,190 @@ int trace_cudaDeviceSynchronize_exit(struct pt_regs *ctx)
     e->duration_ns = 0;
     e->offcpu_time_ns = 0;
     e->switch_count = 0;
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}
+
+/*
+ * Tracepoint: irq_handler_entry (Hard IRQ)
+ * Only trace if interrupting a GPU process
+ */
+SEC("tp_btf/irq_handler_entry")
+int BPF_PROG(irq_handler_entry, int irq, struct irqaction *action)
+{
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = pid_tgid >> 32;
+
+    // Only track if we're interrupting a GPU process
+    if (!is_gpu_process(pid))
+        return 0;
+
+    __u64 now = bpf_ktime_get_ns();
+    __u32 key = 0;
+    bpf_map_update_elem(&irq_start, &key, &now, BPF_ANY);
+
+    struct irq_event *e;
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e) {
+        inc_stat(STAT_DROPPED);
+        return 0;
+    }
+
+    e->timestamp_ns = now;
+    e->pid = pid;
+    e->tid = (__u32)pid_tgid;
+    e->cpu_id = bpf_get_smp_processor_id();
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->hook_type = HOOK_HARDIRQ_ENTRY;
+    e->irq = irq;
+    e->duration_ns = 0;
+
+    // Try to get IRQ handler name
+    if (action) {
+        const char *name = BPF_CORE_READ(action, name);
+        if (name)
+            bpf_probe_read_kernel_str(&e->irq_name, sizeof(e->irq_name), name);
+        else
+            __builtin_memset(&e->irq_name, 0, sizeof(e->irq_name));
+    } else {
+        __builtin_memset(&e->irq_name, 0, sizeof(e->irq_name));
+    }
+
+    bpf_ringbuf_submit(e, 0);
+    inc_stat(STAT_HARDIRQ);
+    return 0;
+}
+
+/*
+ * Tracepoint: irq_handler_exit (Hard IRQ)
+ */
+SEC("tp_btf/irq_handler_exit")
+int BPF_PROG(irq_handler_exit, int irq, struct irqaction *action, int ret)
+{
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = pid_tgid >> 32;
+
+    // Only track if we're interrupting a GPU process
+    if (!is_gpu_process(pid))
+        return 0;
+
+    __u64 now = bpf_ktime_get_ns();
+    __u32 key = 0;
+    __u64 *tsp = bpf_map_lookup_elem(&irq_start, &key);
+    if (!tsp)
+        return 0;
+
+    __u64 delta = now - *tsp;
+
+    struct irq_event *e;
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e) {
+        inc_stat(STAT_DROPPED);
+        return 0;
+    }
+
+    e->timestamp_ns = now;
+    e->pid = pid;
+    e->tid = (__u32)pid_tgid;
+    e->cpu_id = bpf_get_smp_processor_id();
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->hook_type = HOOK_HARDIRQ_EXIT;
+    e->irq = irq;
+    e->duration_ns = delta;
+
+    // Try to get IRQ handler name
+    if (action) {
+        const char *name = BPF_CORE_READ(action, name);
+        if (name)
+            bpf_probe_read_kernel_str(&e->irq_name, sizeof(e->irq_name), name);
+        else
+            __builtin_memset(&e->irq_name, 0, sizeof(e->irq_name));
+    } else {
+        __builtin_memset(&e->irq_name, 0, sizeof(e->irq_name));
+    }
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}
+
+/*
+ * Tracepoint: softirq_entry (Soft IRQ)
+ * Only trace if running in context of a GPU process
+ */
+SEC("tp_btf/softirq_entry")
+int BPF_PROG(softirq_entry, unsigned int vec_nr)
+{
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = pid_tgid >> 32;
+
+    // Only track if we're in a GPU process context
+    if (!is_gpu_process(pid))
+        return 0;
+
+    __u64 now = bpf_ktime_get_ns();
+    __u32 key = 0;
+    bpf_map_update_elem(&irq_start, &key, &now, BPF_ANY);
+
+    struct irq_event *e;
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e) {
+        inc_stat(STAT_DROPPED);
+        return 0;
+    }
+
+    e->timestamp_ns = now;
+    e->pid = pid;
+    e->tid = (__u32)pid_tgid;
+    e->cpu_id = bpf_get_smp_processor_id();
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->hook_type = HOOK_SOFTIRQ_ENTRY;
+    e->irq = vec_nr;
+    e->duration_ns = 0;
+    __builtin_memset(&e->irq_name, 0, sizeof(e->irq_name));
+
+    bpf_ringbuf_submit(e, 0);
+    inc_stat(STAT_SOFTIRQ);
+    return 0;
+}
+
+/*
+ * Tracepoint: softirq_exit (Soft IRQ)
+ */
+SEC("tp_btf/softirq_exit")
+int BPF_PROG(softirq_exit, unsigned int vec_nr)
+{
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = pid_tgid >> 32;
+
+    // Only track if we're in a GPU process context
+    if (!is_gpu_process(pid))
+        return 0;
+
+    __u64 now = bpf_ktime_get_ns();
+    __u32 key = 0;
+    __u64 *tsp = bpf_map_lookup_elem(&irq_start, &key);
+    if (!tsp)
+        return 0;
+
+    __u64 delta = now - *tsp;
+
+    struct irq_event *e;
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e) {
+        inc_stat(STAT_DROPPED);
+        return 0;
+    }
+
+    e->timestamp_ns = now;
+    e->pid = pid;
+    e->tid = (__u32)pid_tgid;
+    e->cpu_id = bpf_get_smp_processor_id();
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->hook_type = HOOK_SOFTIRQ_EXIT;
+    e->irq = vec_nr;
+    e->duration_ns = delta;
+    __builtin_memset(&e->irq_name, 0, sizeof(e->irq_name));
 
     bpf_ringbuf_submit(e, 0);
     return 0;

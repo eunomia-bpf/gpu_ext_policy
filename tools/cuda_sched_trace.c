@@ -53,13 +53,15 @@ static void print_stats(struct cuda_sched_trace_bpf *skel)
 
     fprintf(stderr, "\n");
     fprintf(stderr, "===============================================================================\n");
-    fprintf(stderr, "CUDA + SCHEDULER TRACE SUMMARY\n");
+    fprintf(stderr, "CUDA + SCHEDULER + IRQ TRACE SUMMARY\n");
     fprintf(stderr, "===============================================================================\n");
     fprintf(stderr, "cuLaunchKernel            %8llu\n", stats[0]);
     fprintf(stderr, "cudaLaunchKernel          %8llu\n", stats[1]);
     fprintf(stderr, "cudaSync Enter            %8llu\n", stats[2]);
     fprintf(stderr, "cudaSync Exit             %8llu\n", stats[3]);
     fprintf(stderr, "Sched Switches Tracked    %8llu\n", stats[4]);
+    fprintf(stderr, "Hard IRQs Tracked         %8llu\n", stats[6]);
+    fprintf(stderr, "Soft IRQs Tracked         %8llu\n", stats[7]);
     if (stats[5] > 0) {
         fprintf(stderr, "Dropped Events            %8llu\n", stats[5]);
     }
@@ -84,9 +86,29 @@ static const char *hook_type_str(__u32 hook_type)
         return "syncExit";
     case HOOK_SCHED_SWITCH:
         return "schedSwitch";
+    case HOOK_HARDIRQ_ENTRY:
+        return "hardirqEntry";
+    case HOOK_HARDIRQ_EXIT:
+        return "hardirqExit";
+    case HOOK_SOFTIRQ_ENTRY:
+        return "softirqEntry";
+    case HOOK_SOFTIRQ_EXIT:
+        return "softirqExit";
     default:
         return "unknown";
     }
+}
+
+// Softirq names (from kernel include/trace/events/irq.h)
+static const char *softirq_name(__u32 vec_nr)
+{
+    static const char *names[] = {
+        "HI", "TIMER", "NET_TX", "NET_RX", "BLOCK",
+        "IRQ_POLL", "TASKLET", "SCHED", "HRTIMER", "RCU"
+    };
+    if (vec_nr < sizeof(names) / sizeof(names[0]))
+        return names[vec_nr];
+    return "unknown";
 }
 
 static int handle_event(void *ctx, void *data, size_t data_sz)
@@ -154,6 +176,47 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 
         // Empty sched fields for sync events
         printf(",\n");
+
+    } else if (data_sz == sizeof(struct irq_event)) {
+        const struct irq_event *e = data;
+
+        if (start_time_ns == 0)
+            start_time_ns = e->timestamp_ns;
+
+        elapsed_ns = e->timestamp_ns - start_time_ns;
+
+        // CSV for IRQ events
+        // timestamp_ns,event_type,pid,tid,comm,cpu,
+        // grid_x,grid_y,grid_z,block_x,block_y,block_z,shared_mem,stream,
+        // last_offcpu_ns,last_oncpu_ns,irq_num,irq_name,duration_ns
+
+        printf("%llu,%s,%u,%u,%s,%u,",
+               (unsigned long long)elapsed_ns,
+               hook_type_str(e->hook_type),
+               e->pid,
+               e->tid,
+               e->comm,
+               e->cpu_id);
+
+        // Empty CUDA fields
+        printf(",,,,,,,,");
+
+        // Empty sched fields
+        printf(",,");
+
+        // IRQ specific fields
+        if (e->hook_type == HOOK_SOFTIRQ_ENTRY || e->hook_type == HOOK_SOFTIRQ_EXIT) {
+            printf("%u,%s,%llu\n",
+                   e->irq,
+                   softirq_name(e->irq),
+                   (unsigned long long)e->duration_ns);
+        } else {
+            // Hardirq
+            printf("%u,%s,%llu\n",
+                   e->irq,
+                   e->irq_name[0] ? e->irq_name : "unknown",
+                   (unsigned long long)e->duration_ns);
+        }
     }
 
     return 0;
@@ -216,6 +279,10 @@ int main(int argc, char **argv)
     struct bpf_link *link_cudalaunch = NULL;
     struct bpf_link *link_sync_enter = NULL;
     struct bpf_link *link_sync_exit = NULL;
+    struct bpf_link *link_hardirq_entry = NULL;
+    struct bpf_link *link_hardirq_exit = NULL;
+    struct bpf_link *link_softirq_entry = NULL;
+    struct bpf_link *link_softirq_exit = NULL;
     const char *cuda_driver_lib = NULL;
     const char *cuda_runtime_lib = NULL;
     int err;
@@ -259,6 +326,35 @@ int main(int argc, char **argv)
     }
     fprintf(stderr, "Attached tracepoint: sched_switch\n");
 
+    // Attach IRQ tracepoints
+    link_hardirq_entry = bpf_program__attach(skel->progs.irq_handler_entry);
+    if (!link_hardirq_entry) {
+        fprintf(stderr, "Warning: Failed to attach irq_handler_entry: %s\n", strerror(errno));
+    } else {
+        fprintf(stderr, "Attached tracepoint: irq_handler_entry\n");
+    }
+
+    link_hardirq_exit = bpf_program__attach(skel->progs.irq_handler_exit);
+    if (!link_hardirq_exit) {
+        fprintf(stderr, "Warning: Failed to attach irq_handler_exit: %s\n", strerror(errno));
+    } else {
+        fprintf(stderr, "Attached tracepoint: irq_handler_exit\n");
+    }
+
+    link_softirq_entry = bpf_program__attach(skel->progs.softirq_entry);
+    if (!link_softirq_entry) {
+        fprintf(stderr, "Warning: Failed to attach softirq_entry: %s\n", strerror(errno));
+    } else {
+        fprintf(stderr, "Attached tracepoint: softirq_entry\n");
+    }
+
+    link_softirq_exit = bpf_program__attach(skel->progs.softirq_exit);
+    if (!link_softirq_exit) {
+        fprintf(stderr, "Warning: Failed to attach softirq_exit: %s\n", strerror(errno));
+    } else {
+        fprintf(stderr, "Attached tracepoint: softirq_exit\n");
+    }
+
     // Attach uprobes manually
     if (cuda_driver_lib) {
         fprintf(stderr, "Using CUDA Driver library: %s\n", cuda_driver_lib);
@@ -289,9 +385,9 @@ int main(int argc, char **argv)
     signal(SIGTERM, sig_handler);
 
     // Print CSV header to stdout
-    printf("timestamp_ns,event_type,pid,tid,comm,cpu,grid_x,grid_y,grid_z,block_x,block_y,block_z,shared_mem,stream,last_offcpu_ns,last_oncpu_ns\n");
+    printf("timestamp_ns,event_type,pid,tid,comm,cpu,grid_x,grid_y,grid_z,block_x,block_y,block_z,shared_mem,stream,last_offcpu_ns,last_oncpu_ns,irq_num,irq_name,duration_ns\n");
 
-    fprintf(stderr, "Tracing CUDA + scheduler events... Press Ctrl-C to stop.\n");
+    fprintf(stderr, "Tracing CUDA + scheduler + IRQ events... Press Ctrl-C to stop.\n");
     fprintf(stderr, "CSV output will be written to stdout\n");
 
     // Process events
@@ -315,6 +411,10 @@ cleanup:
     bpf_link__destroy(link_cudalaunch);
     bpf_link__destroy(link_sync_enter);
     bpf_link__destroy(link_sync_exit);
+    bpf_link__destroy(link_hardirq_entry);
+    bpf_link__destroy(link_hardirq_exit);
+    bpf_link__destroy(link_softirq_entry);
+    bpf_link__destroy(link_softirq_exit);
     ring_buffer__free(rb);
     cuda_sched_trace_bpf__destroy(skel);
     return err < 0 ? -err : 0;

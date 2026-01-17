@@ -397,6 +397,238 @@ Burst 间隔 ≈ CPU 准备下一个 token 的数据
 
 ---
 
+## IRQ 影响分析 🆕
+
+### 为什么追踪 IRQ？
+
+**Meta 的发现** (sched_ext AI Training, LPC 2025):
+- **"IRQ 抢占我们的重要任务"** 是生产环境中的常见问题
+- 中断会打断 GPU 进程的 kernel 提交流程
+- 特别是 **网络中断**（NET_RX/NET_TX）和 **块设备中断**（BLOCK）
+
+### IRQ 理论上的影响机制
+
+**1. 直接时间开销**：
+- IRQ handler 本身的执行时间
+- 从用户态 → 内核态 → IRQ handler → 返回用户态的切换开销
+- 测量：`duration_ns` 字段
+
+**2. Cache 污染** ⭐ 最隐蔽的影响：
+```
+GPU 进程正在运行:
+  L1/L2/L3 Cache 都是热数据 (tensor metadata, kernel parameters)
+→ IRQ 发生，切换到内核态
+  IRQ handler 访问网络栈/块设备驱动数据
+  → 驱逐 Cache 中的 GPU 进程数据
+→ IRQ 返回，GPU 进程继续
+  → Cache miss！需要重新加载数据
+  → 延迟增加 50-200 ns/access
+```
+
+**影响**：即使 IRQ handler 只花 5 µs，Cache 污染可能导致后续 10-50 µs 的额外延迟。
+
+**3. 流水线停顿**：
+- CPU 流水线被中断，指令预取、分支预测状态丢失
+- 恢复时需要重新填充流水线
+- 典型开销：~100 CPU cycles (30-50 ns)
+
+**4. 延迟累积** - 关键路径问题：
+```
+正常流程:
+  Launch_1 (100ns) → CPU 计算 (2µs) → Launch_2 (100ns)
+  Total: 2.2 µs
+
+IRQ 打断:
+  Launch_1 (100ns) → CPU 计算 (1µs) → IRQ (5µs) → CPU 继续 (1µs + cache miss 20µs) → Launch_2
+  Total: 27.1 µs
+```
+
+**关键洞察**：
+- IRQ 本身时间 (5 µs) + Cache 污染延迟 (20 µs) = **25 µs penalty**
+- 远大于 IRQ handler 执行时间！
+
+**5. 软中断的特殊性**：
+- **Softirq 在进程上下文中运行**，不切换页表
+- Cache 污染程度取决于 softirq 类型：
+  - `TIMER`: 轻微（只访问定时器数据结构）
+  - `NET_RX`: 中等（网络栈数据）
+  - `RCU`: 轻微（内核数据结构）
+  - `SCHED`: 中等（调度器数据结构）
+
+**6. 硬中断 vs 软中断**：
+| 特性 | 硬中断 | 软中断 |
+|------|--------|--------|
+| 上下文切换 | 是（切换到内核栈） | 否（借用当前进程栈） |
+| 页表切换 | 否（共享内核页表） | 否 |
+| Cache 污染 | 中等到严重 | 轻微到中等 |
+| 典型持续时间 | 1-50 µs | 1-20 µs |
+| 可抢占性 | 否（禁止中断） | 否 |
+
+### 能分析什么？
+
+**1. 硬中断（Hard IRQ）影响**：
+```bash
+# 查找所有硬中断事件
+grep "hardirqEntry\|hardirqExit" trace.csv
+
+# 分析：
+- irq_num: 中断编号 (例如：23 = NVMe, 125 = 网卡)
+- irq_name: 中断处理器名称 (例如："nvme0q0", "eth0-TxRx-0")
+- duration_ns: 中断处理时间
+```
+
+**典型问题场景**：
+- **网卡中断频繁**：高频网络 I/O 打断 GPU 提交
+- **NVMe 中断**：数据加载时的块设备中断
+- **Timer 中断**：系统定时器（通常无法避免）
+
+**2. 软中断（Soft IRQ）影响**：
+```bash
+# 查找所有软中断事件
+grep "softirqEntry\|softirqExit" trace.csv
+
+# 常见软中断类型：
+- NET_RX (3): 网络接收
+- NET_TX (2): 网络发送
+- TIMER (1): 定时器
+- SCHED (7): 调度器
+- RCU (9): RCU 回调
+```
+
+**3. 快速分析脚本**：
+```python
+import pandas as pd
+
+df = pd.read_csv('trace.csv')
+irq_exit = df[df['event_type'].str.contains('irqExit', na=False)]
+
+# 按类型统计
+for irq_type in irq_exit['irq_name'].unique():
+    subset = irq_exit[irq_exit['irq_name'] == irq_type]
+    total_time = subset['duration_ns'].sum() / 1e6  # ms
+    count = len(subset)
+    avg_time = subset['duration_ns'].mean() / 1e3  # µs
+    print(f"{irq_type}: {count} events, {total_time:.2f} ms total, {avg_time:.1f} µs avg")
+
+# 总影响
+total_runtime = df['timestamp_ns'].max() / 1e9  # seconds
+total_irq_time = irq_exit['duration_ns'].sum() / 1e6  # ms
+print(f"\nIRQ impact: {total_irq_time:.2f} ms / {total_runtime:.2f} s = {total_irq_time/(total_runtime*1000)*100:.4f}%")
+```
+
+### 优化建议
+
+**如果发现 IRQ 影响显著**：
+
+1. **网络中断优化**：
+   ```bash
+   # 绑定网卡中断到特定 CPU (避开 GPU 进程所在核心)
+   echo 0-3 > /proc/irq/125/smp_affinity_list  # 假设 125 是网卡中断号
+
+   # GPU 进程绑定到其他核心
+   taskset -c 4-7 ./your_gpu_app
+   ```
+
+2. **块设备中断优化**：
+   ```bash
+   # 使用 io_uring 减少中断频率
+   # 或者绑定块设备中断到特定 CPU
+   ```
+
+3. **启用中断合并**（Interrupt Coalescing）：
+   ```bash
+   # 网卡中断合并
+   ethtool -C eth0 rx-usecs 50 rx-frames 10
+   ```
+
+4. **使用 isolcpus**：
+   ```bash
+   # 启动参数隔离 CPU 4-7，避免中断
+   isolcpus=4-7 nohz_full=4-7
+
+   # GPU 进程运行在隔离的核心上
+   taskset -c 4-7 ./your_gpu_app
+   ```
+
+### 真实案例：qwen3.cu IRQ 分析
+
+**测试程序**：Qwen3 0.6B LLM 推理，生成约 30 tokens
+
+**追踪数据**：
+```
+总运行时间: 4.99 秒
+CUDA launches: 125,236 次
+调度切换: 2,909 次
+软中断: 653 次 (1,306 个事件，entry+exit)
+硬中断: 0 次
+```
+
+**软中断分类**：
+| 类型 | 次数 | 总时间 | 平均时间 | 最大时间 |
+|------|------|--------|----------|----------|
+| TIMER | 317 | 0.77 ms | 2.4 µs | 30.1 µs |
+| RCU | 291 | 0.40 ms | 1.4 µs | 17.2 µs |
+| NET_RX | 30 | 0.13 ms | 4.5 µs | 14.0 µs |
+| SCHED | 15 | 0.07 ms | 4.9 µs | 18.9 µs |
+
+**IRQ 影响**：
+- IRQ 总时间: **1.38 ms**
+- 占总运行时间: **0.0276%**
+- 平均每个 softirq: 2.1 µs
+
+**结论**：
+1. ✅ **IRQ 影响极小** (0.0276%)，远小于调度器影响 (1.2%)
+2. ✅ **TIMER 是主要中断源**，但持续时间短 (平均 2.4 µs)
+3. ✅ **NET_RX 中断很少**，说明本地推理没有网络 I/O
+4. ✅ **硬中断为 0**，说明没有网卡/NVMe 直接打断 GPU 进程
+5. ⚠️ **不值得优化 IRQ** - 即使完全消除也只能省 1.38 ms
+
+**对比调度器影响**：
+- 调度器影响: 0.93 秒 (1.2%)
+- IRQ 影响: 1.38 ms (0.0276%)
+- **调度器影响是 IRQ 的 674 倍**
+
+**为什么 qwen3 的 IRQ 影响这么小？**
+
+理论上 IRQ 应该造成显著影响（见上面的理论分析），但 qwen3 实测只有 0.0276%，原因：
+
+1. **Burst 提交模式** ⭐ 最重要：
+   - qwen3 是批量提交：950 个 launch 在 <100µs 内连续提交
+   - IRQ 很难在这么短的时间窗口内发生
+   - **653 个 softirq / 125,236 个 launches = 0.52% 的 launch 可能被打断**
+   - 大部分 IRQ 发生在 burst 之间的间隔（数十 ms），不影响关键路径
+
+2. **TIMER softirq 占主导** (49%)：
+   - TIMER softirq 的 Cache footprint 很小
+   - 主要访问 `jiffies`、`timer_list` 等内核数据结构
+   - 对 GPU 进程 Cache 的污染轻微
+
+3. **本地推理无网络 I/O**：
+   - NET_RX 只有 30 次（4.6%）
+   - 如果是分布式训练（需要 all-reduce），NET_RX 会暴增
+   - **Meta 的场景就是高频网络 I/O → NET_RX 成为瓶颈**
+
+4. **没有数据加载中断**：
+   - 硬中断为 0 → 没有 NVMe/SSD 读取
+   - 如果是 on-the-fly 数据加载，会有大量 BLOCK 中断
+
+**什么场景下 IRQ 会成为问题？**
+
+| 场景 | IRQ 类型 | 频率 | 预期影响 |
+|------|----------|------|----------|
+| 分布式训练 (GPU 间通信) | NET_RX/NET_TX | 数千次/秒 | **5-20%** |
+| On-the-fly 数据加载 | BLOCK (NVMe) | 数百次/秒 | **2-10%** |
+| 推理服务 (网络请求) | NET_RX | 取决于 QPS | **1-15%** |
+| 本地批量推理 (qwen3) | TIMER, RCU | 数十次/秒 | **0.01-0.1%** ✅ |
+
+**关键启示**：
+- 同样的工具，**不同的工作负载会得到完全不同的结论**
+- qwen3: IRQ 无关紧要 (0.0276%)
+- 分布式训练: IRQ 可能是主要瓶颈 (5-20%)
+- **必须用真实工作负载测试，不能凭理论猜测**
+
+---
+
 ## 追踪数据格式
 
 CSV 字段：
@@ -404,7 +636,7 @@ CSV 字段：
 | 字段 | 说明 |
 |------|------|
 | `timestamp_ns` | 相对时间戳（纳秒） |
-| `event_type` | `cuLaunchKernel`, `cudaLaunchKernel`, `syncEnter`, `syncExit`, `schedSwitch` |
+| `event_type` | `cuLaunchKernel`, `cudaLaunchKernel`, `syncEnter`, `syncExit`, `schedSwitch`, `hardirqEntry`, `hardirqExit`, `softirqEntry`, `softirqExit` |
 | `pid`, `tid` | 进程/线程 ID |
 | `comm` | 进程名 |
 | `cpu` | CPU 核心 |
@@ -412,8 +644,11 @@ CSV 字段：
 | `block_x/y/z` | CUDA block 维度 (launch 事件) |
 | `shared_mem` | Shared memory 大小 (launch 事件) |
 | `stream` | CUDA stream 指针 (launch 事件) |
-| `last_offcpu_ns` | 上次 OFF-CPU 的时间戳（0 = 当前 ON-CPU） |
-| `last_oncpu_ns` | 上次 ON-CPU 的时间戳（0 = 当前 OFF-CPU） |
+| `last_offcpu_ns` | 上次 OFF-CPU 的时间戳（0 = 当前 ON-CPU，仅 schedSwitch） |
+| `last_oncpu_ns` | 上次 ON-CPU 的时间戳（0 = 当前 OFF-CPU，仅 schedSwitch） |
+| `irq_num` | 中断编号（硬中断）或向量号（软中断，仅 IRQ 事件） |
+| `irq_name` | 中断处理器名称（硬中断）或类型（软中断：HI, TIMER, NET_TX, NET_RX, BLOCK, TASKLET, SCHED, HRTIMER, RCU） |
+| `duration_ns` | 中断持续时间（仅 IRQ Exit 事件） |
 
 ---
 
@@ -422,7 +657,7 @@ CSV 字段：
 1. **eBPF 开销**：追踪本身有 1-5% 开销
 2. **仅追踪 CUDA**：不支持其他 GPU API
 3. **缺少 GPU 侧数据**：不知道 kernel 实际执行时间
-4. **缺少抢占来源**：不知道是谁抢占了 GPU 进程
+4. **IRQ 追踪限制**：只追踪打断 GPU 进程的 IRQ，不追踪抢占进程的 PID（需要扩展 sched_switch 记录）
 5. **需要权限**：必须 sudo 运行
 
 ---
