@@ -1,0 +1,13 @@
+test_type,parameter,time_ms,bandwidth_gbps,efficiency
+memory,1,0.0042,2005.39,1.1190
+memory,2,0.0043,1952.22,1.0893
+memory,4,0.0082,1019.82,0.5691
+memory,8,0.0125,672.91,0.3755
+memory,16,0.0144,581.43,0.3244
+memory,32,0.0226,371.30,0.2072
+divergence,1,0.0963,NA,1.0000
+divergence,2,0.1602,NA,0.6011
+divergence,4,0.3033,NA,0.3175
+divergence,8,0.6592,NA,0.1461
+divergence,16,1.3885,NA,0.0693
+divergence,32,2.7675,NA,0.0348
