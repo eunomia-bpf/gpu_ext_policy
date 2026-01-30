@@ -9,13 +9,51 @@ The following taxonomy synthesizes findings from static verifiers (GPUVerify, GK
 
 ---
 
+## Taxonomy Overview
+
+Each bug class is categorized along two dimensions:
+
+**Impact Type:**
+- **Safety** — Program fails to complete safely (crash, hang, isolation failure， deadlock)
+- **Correctness** — Program completes but produces wrong results
+- **Performance** — Program works correctly but inefficiently
+
+**GPU Specificity:**
+- **GPU-specific** — Unique to GPU/SIMT execution model
+- **GPU-amplified** — Exists on CPUs but much more severe on GPUs
+- **CPU-shared** — Similar on both platforms
+
+| # | Bug Class | Impact | GPU Specificity |
+|---|-----------|--------|-----------------|
+| 1 | Barrier Divergence | Safety | GPU-specific |
+| 2 | Invalid Warp Sync | Safety | GPU-specific |
+| 3 | Scoped Sync Bugs | Correctness | GPU-specific |
+| 4 | Warp-divergence Race | Correctness | GPU-specific |
+| 5 | Uncoalesced Memory Access | Performance | GPU-specific |
+| 6 | Control-Flow Divergence | Performance | GPU-specific |
+| 7 | Bank Conflicts | Performance | GPU-specific |
+| 8 | Block-Size Dependence | Correctness | GPU-specific |
+| 9 | Launch Config Assumptions | Correctness | GPU-specific |
+| 10 | "Forgot Volatile" | Correctness | GPU-specific |
+| 11 | Shared-Memory Data Races | Correctness | GPU-amplified |
+| 12 | Atomic Contention | Performance | GPU-amplified |
+| 13 | Deadlocks Beyond Barrier | Safety | GPU-amplified |
+| 14 | Kernel Non-Termination | Safety | GPU-amplified |
+| 15 | Redundant Barriers | Performance | GPU-amplified |
+| 16 | Global-Memory Data Races | Correctness | CPU-shared |
+| 17 | Host ↔ Device Async Races | Correctness | CPU-shared |
+| 18 | Memory Safety | Safety | CPU-shared |
+| 19 | Arithmetic Errors | Correctness/Safety | CPU-shared |
+
+---
+
 ## 1. Canonical bug list (dedup + filled from OSS scan)
 
 
-### 1) Barrier Divergence at Block Barriers (`__syncthreads`) — GPU-specific, GPU-amplified (liveness)
+### 1) Barrier Divergence at Block Barriers (`__syncthreads`) — Safety, GPU-specific
 
 #### What it is / why it matters
-  A block-wide barrier requires *all* threads in the block to reach it. If the barrier is placed under a condition that evaluates differently across threads, some threads wait forever → deadlock / kernel hang. This is treated as a first-class defect in GPU kernel verification (e.g., "barrier divergence" in GPUVerify), and is also one of the main CUDA synchronization bug types characterized/targeted by AuCS/Wu.
+  A block-wide barrier requires *all* threads in the block to reach it. If the barrier is placed under a condition that evaluates differently across threads, some threads wait forever → deadlock / kernel hang. This is treated as a first-class defect in GPU kernel verification (e.g., "barrier divergence" in GPUVerify), and is also one of the main CUDA synchronization bug types characterized/targeted by AuCS/Wu. Note that general control-flow divergence is a performance issue, but barrier divergence is the *specific, critical case* where divergent control flow causes threads to reach a barrier non-uniformly, turning a performance issue into a **liveness/correctness failure** (deadlock).
 
 #### Bug example
 
@@ -41,7 +79,7 @@ __global__ void k(float* a) {
 
 ---
 
-### 2) Invalid Warp Synchronization (`__syncwarp` mask, warp-level barriers) — GPU-specific
+### 2) Invalid Warp Synchronization (`__syncwarp` mask, warp-level barriers) — Safety, GPU-specific
 
 #### What it is / why it matters
   Warp-level sync requires correct participation masks. A common failure is calling `__syncwarp(mask)` where not all lanes that reach the barrier are included in `mask`, or where divergence causes only a subset to arrive.
@@ -71,7 +109,7 @@ __global__ void k(int* out) {
 
 ---
 
-### 3) Scoped Synchronization Bugs — GPU-specific semantics
+### 3) Scoped Synchronization Bugs — Correctness, GPU-specific
 
 #### What it is / why it matters
   GPU adds *scope* and memory-model subtleties that don't exist on CPUs. **Scoped races** occur when synchronization/atomics are done at an insufficient scope (e.g., using `atomicAdd_block` when `atomicAdd` with device scope is needed). This is a distinct GPU bug class because scope semantics are unique to CUDA's memory model.
@@ -98,10 +136,10 @@ __global__ void k(int* counter) {
 
 ---
 
-### 4) Warp-divergence Race — GPU-specific semantics
+### 4) Warp-divergence Race — Correctness, GPU-specific
 
 #### What it is / why it matters
-  A **warp-divergence race** is a GPU-specific phenomenon where **divergence changes which threads are effectively concurrent**, producing racy outcomes that don't map cleanly to CPU assumptions. SIMT execution order + reconvergence can create subtle concurrency patterns. This is one reason "CPU-style race reasoning" doesn't port directly to GPUs.
+  A **warp-divergence race** is a GPU-specific phenomenon where **divergence changes which threads are effectively concurrent**, producing racy outcomes that don't map cleanly to CPU assumptions. SIMT execution order + reconvergence can create subtle concurrency patterns. This is one reason "CPU-style race reasoning" doesn't port directly to GPUs. While control-flow divergence is generally a performance issue (serialized execution paths), warp-divergence race is a **correctness** issue where divergence creates unexpected concurrency patterns leading to data races—same root cause, but different failure modes: perf degradation vs. racy/undefined behavior.
 
 #### Bug example
 
@@ -127,7 +165,7 @@ __global__ void k(int* A) {
 
 ---
 
-### 5) Uncoalesced / Non‑Coalesceable Global Memory Access Patterns — GPU-specific (perf → bounded interference)
+### 5) Uncoalesced / Non‑Coalesceable Global Memory Access Patterns — Performance, GPU-specific
 
 #### What it is / why it matters
   Warp memory coalescing is a GPU-specific performance contract. "Uncoalesced" accesses can cause large slowdowns (memory transactions split into many).
@@ -155,10 +193,10 @@ __global__ void k(float* a, int stride) {
 
 ---
 
-### 6) Control-Flow Divergence (warp branch divergence) — GPU-specific (perf, and interacts with liveness)
+### 6) Control-Flow Divergence (warp branch divergence) — Performance, GPU-specific
 
 #### What it is / why it matters
-  SIMT divergence serializes paths within a warp, lowering "branch efficiency" and increasing worst-case overhead. Divergence is also the root cause of barrier divergence when barriers are in conditional code.
+  SIMT divergence serializes paths within a warp, lowering "branch efficiency" and increasing worst-case overhead. This entry focuses on divergence as a **performance** issue. However, divergence is also the root cause of more severe correctness bugs: barrier divergence (deadlock when barriers are in conditional code) and warp-divergence races (unexpected concurrency patterns leading to data races).
 
 #### Bug example
 
@@ -183,7 +221,7 @@ __global__ void k(float* out, float* in) {
 
 ---
 
-### 7) Shared-Memory Bank Conflicts — GPU-specific (perf)
+### 7) Shared-Memory Bank Conflicts — Performance, GPU-specific
 
 #### What it is / why it matters
   Bank conflicts are a shared-memory–specific performance pathology: accesses serialize when multiple lanes hit the same bank.
@@ -211,7 +249,7 @@ __global__ void k(int* out) {
 
 ---
 
-### 8) Block-Size Dependence — GPU-specific (correctness & tuning safety)
+### 8) Block-Size Dependence — Correctness, GPU-specific
 
 #### What it is / why it matters
   Block-size independence is essential for safe block-size tuning. Kernels that implicitly depend on specific `blockDim` values can produce incorrect results or races when launched with different configurations. This is critical for auto-tuning and portability across GPU generations.
@@ -239,7 +277,7 @@ __global__ void k(float* out, float* in) {
 
 ---
 
-### 9) Launch Config Assumptions — GPU-specific (correctness)
+### 9) Launch Config Assumptions — Correctness, GPU-specific
 
 #### What it is / why it matters
   Many CUDA kernels assume certain launch configurations (e.g., single block, specific grid dimensions). Violating these assumptions leads to incorrect results or races that are hard to diagnose.
@@ -265,7 +303,7 @@ __global__ void reduce(float* out, float* in) {
 
 ---
 
-### 10) "Forgot Volatile" / Memory Visibility Pitfalls — GPU-specific (correctness)
+### 10) "Forgot Volatile" / Memory Visibility Pitfalls — Correctness, GPU-specific
 
 #### What it is / why it matters
   GPU code often relies on compiler and memory-model subtleties. GKLEE reports a real-world category: forgetting to mark a shared memory variable as `volatile`, producing stale reads/writes due to compiler optimization or caching behavior. This is a GPU-flavored instance of memory visibility/ordering bugs that can be hard to reproduce.([Lingming Zhang][18])
@@ -292,7 +330,7 @@ while (flag == 0) { }         // may spin if compiler hoists load / visibility i
 
 ---
 
-### 11) Shared-Memory Data Races (`__shared__`) — CPU-shared, GPU-amplified
+### 11) Shared-Memory Data Races (`__shared__`) — Correctness, GPU-amplified
 
 #### What it is / why it matters
   Threads in a block access on-chip shared memory concurrently; missing/incorrect synchronization causes races. This is a classic CUDA bug class (AuCS/Wu).
@@ -330,7 +368,7 @@ __global__ void k(int* g) {
 
 ---
 
-### 12) Atomic Contention — GPU-amplified (perf → DoS)
+### 12) Atomic Contention — Performance, GPU-amplified
 
 #### What it is / why it matters
   Heavy atomic contention is a classic "performance bug that behaves like a DoS" under massive parallelism. Even when correctness is preserved, contention on a single address can cause extreme slowdowns (orders of magnitude). With millions of threads, a single hot atomic can serialize execution and cause tail latency explosion.
@@ -358,10 +396,10 @@ __global__ void k(int* counter) {
 
 ---
 
-### 13) Deadlocks Beyond Barrier Divergence (locks/spin + SIMT lockstep + named-barrier misuse) — CPU-shared, GPU-amplified (+ sometimes GPU-specific)
+### 13) Deadlocks Beyond Barrier Divergence (locks/spin + SIMT lockstep + named-barrier misuse) — Safety, GPU-amplified
 
 #### What it is / why it matters
-  Besides barrier divergence, SIMT lockstep can create deadlocks in patterns that are unusual on CPUs. Warp-specialized kernels often use **named barriers** or structured synchronization patterns between warps/roles (producer/consumer). Bugs include: (a) deadlock, (b) unsafe barrier reuse ("recycling") across iterations, (c) races between producers/consumers.
+  Besides barrier divergence (which is specifically about `__syncthreads` under divergent control flow), SIMT lockstep can create deadlocks in other patterns that are unusual on CPUs: spin-waiting, lock contention within a warp, and named-barrier misuse. Warp-specialized kernels often use **named barriers** or structured synchronization patterns between warps/roles (producer/consumer). Bugs include: (a) spin deadlock due to missing signals, (b) unsafe barrier reuse ("recycling") across iterations, (c) races between producers/consumers.
 
 #### Bug example (spin deadlock)
 
@@ -396,7 +434,7 @@ __global__ void k(int* flag, int* data) {
 
 ---
 
-### 14) Kernel Non-Termination / Infinite Loops — CPU-shared, GPU-amplified
+### 14) Kernel Non-Termination / Infinite Loops — Safety, GPU-amplified
 
 #### What it is / why it matters
   Infinite loops can hang GPU execution. In practice, non-termination is especially dangerous because GPU preemption/recovery can be coarse.
@@ -422,7 +460,7 @@ __global__ void k(int* flag) {
 
 ---
 
-### 15) Redundant Barriers (unnecessary `__syncthreads`) — CPU-shared-ish, GPU-specific impact (perf)
+### 15) Redundant Barriers (unnecessary `__syncthreads`) — Performance, GPU-amplified
 
 #### What it is / why it matters
   A redundant barrier is a performance-pathology class: removing the barrier **does not introduce a race**, so the barrier was unnecessary overhead.
@@ -453,7 +491,7 @@ __global__ void k(int* out) {
 
 ---
 
-### 16) Global-Memory Data Races — CPU-shared
+### 16) Global-Memory Data Races — Correctness, CPU-shared
 
 #### What it is / why it matters
   Races on global memory are a fundamental correctness issue. Unlike shared memory (block-local), global memory is accessible by all threads across all blocks, making races harder to reason about. Many GPU race detectors historically focused on shared memory and ignored global-memory races.
@@ -482,7 +520,7 @@ __global__ void k(int* g, int n) {
 
 ---
 
-### 17) Host ↔ Device Asynchronous Data Races (API ordering bugs) — CPU-shared-ish, GPU-specific in practice
+### 17) Host ↔ Device Asynchronous Data Races (API ordering bugs) — Correctness, CPU-shared
 
 #### What it is / why it matters
   CUDA exposes async kernel launches/memcpy/events; host code can race with device work if synchronization is missing. This is a major real-world bug source in heterogeneous programs and is *not* covered by pure kernel-only verifiers.
@@ -509,7 +547,7 @@ cudaMemcpy(h_data, d_data, N * sizeof(int), cudaMemcpyDeviceToHost);  // race wi
 
 ---
 
-### 18) Memory Safety: Out-of-Bounds / Misaligned / Use-After-Free / Use-After-Scope / Uninitialized — CPU-shared, GPU-specific (security/availability in multi-tenant)
+### 18) Memory Safety: Out-of-Bounds / Misaligned / Use-After-Free / Use-After-Scope / Uninitialized — Safety, CPU-shared
 
 #### What it is / why it matters
   Classic memory safety includes both **spatial** (OOB, misaligned) and **temporal** (UAF, UAS) violations. Temporal bugs exist on GPUs too: pointers can outlive allocations (host frees while kernel still uses, device-side stack frame returns, etc.).
@@ -579,7 +617,7 @@ __global__ void k(float* out, float* in, int n) {
 
 ---
 
-### 19) Arithmetic Errors (overflow, division by zero) — CPU-shared
+### 19) Arithmetic Errors (overflow, division by zero) — Correctness/Safety, CPU-shared
 
 #### What it is / why it matters
   Arithmetic errors can corrupt keys/indices and cascade into memory safety/perf disasters.
