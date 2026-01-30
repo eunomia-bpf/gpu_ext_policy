@@ -1,11 +1,16 @@
+# A Taxonomy of GPU Bugs: 19 Defect Classes for CUDA Verification
 
 ## Introduction
 
-GPU programming introduces a distinct class of correctness and performance challenges that differ fundamentally from traditional CPU-based systems. The SIMT (Single Instruction, Multiple Threads) execution model, hierarchical memory architecture, and massive parallelism create unique bug patterns that require specialized verification and detection techniques. This taxonomy categorizes GPU-specific defects into three major classes: (1) **GPU-specific bugs** that arise from SIMT semantics, warp-level synchronization, and GPU memory hierarchies; (2) **GPU-amplified bugs** that exist conceptually on CPUs but manifest with dramatically increased severity under GPU parallelism; and (3) **CPU-shared bugs** that occur in both environments but require GPU-aware detection and mitigation strategies.
+GPU programming introduces a distinct class of correctness and performance challenges that differ fundamentally from traditional CPU-based systems. The SIMT (Single Instruction, Multiple Threads) execution model, hierarchical memory architecture, and massive parallelism create unique bug patterns that require specialized verification and detection techniques. 
 
-A critical cross-cutting concern in modern GPU deployments is **performance interference in multi-tenant environments**. In concurrent GPU usage, contention for shared resources makes execution time unpredictable. "Making Powerful Enemies on NVIDIA GPUs" explicitly studies **interference channels** and how adversarial "enemy" kernels can amplify slowdowns to stress worst-case execution times. This is the strongest literature anchor for the argument that performance interference is a *system-level safety* property when GPUs are shared. For systems like gpu_ext that inject policy code into GPU kernels, this motivates treating bounded overhead and predictable performance as correctness properties—not merely optimization goals.
+Just as eBPF enables safe, verified extension code to run inside the Linux kernel, **bpftime gpu_ext** (formally **eGPU**) brings eBPF to GPUs—allowing user-defined policy code (for observability, scheduling, or resource control) to be injected into GPU kernels with **static verification guarantees**. Such a GPU extension framework must ensure that policy code cannot introduce crashes, hangs, data races, or unbounded overhead. This taxonomy identifies the defect classes that a GPU extension verifier must address, drawing lessons from eBPF's success: restrict the programming model, enforce bounded execution, and verify memory safety before loading. 
 
-The following taxonomy synthesizes findings from static verifiers (GPUVerify, GKLEE, ESBMC-GPU), dynamic detectors (Compute Sanitizer, Simulee, CuSan), and empirical bug studies (Wu et al., ScoRD, iGUARD). Each entry identifies the bug class, provides concrete examples, documents detection tools, and offers actionable guidance for gpu_ext policy verification. The taxonomy is organized to support a "defense in depth" verification strategy: statically reject policies that can introduce GPU-specific hazards, dynamically validate at runtime where static analysis is insufficient, and enforce bounded resource consumption to guarantee availability.
+This taxonomy categorizes GPU-specific defects into three major classes: (1) **GPU-specific bugs** that arise from SIMT semantics, warp-level synchronization, and GPU memory hierarchies; (2) **GPU-amplified bugs** that exist conceptually on CPUs but manifest with dramatically increased severity under GPU parallelism; and (3) **CPU-shared bugs** that occur in both environments but require GPU-aware detection and mitigation strategies.
+
+A critical cross-cutting concern in modern GPU deployments is **performance interference in multi-tenant environments**. In concurrent GPU usage, contention for shared resources makes execution time unpredictable. "Making Powerful Enemies on NVIDIA GPUs" explicitly studies **interference channels** and how adversarial "enemy" kernels can amplify slowdowns to stress worst-case execution times. This is the strongest literature anchor for the argument that performance interference is a *system-level safety* property when GPUs are shared. For GPU extension systems that inject policy code into kernels, this motivates treating bounded overhead and predictable performance as correctness properties—not merely optimization goals.
+
+The following taxonomy synthesizes findings from static verifiers (GPUVerify, GKLEE, ESBMC-GPU), dynamic detectors (Compute Sanitizer, Simulee, CuSan), and empirical bug studies (Wu et al., ScoRD, iGUARD). Each entry identifies the bug class, provides concrete examples, documents detection tools, and offers actionable verification strategies. The taxonomy is organized to support a "defense in depth" verification strategy: statically reject policies that can introduce GPU-specific hazards, dynamically validate at runtime where static analysis is insufficient, and enforce bounded resource consumption to guarantee availability.
 
 ---
 
@@ -27,19 +32,19 @@ Each bug class is categorized along two dimensions:
 |---|-----------|--------|-----------------|
 | 1 | Barrier Divergence | Safety | GPU-specific |
 | 2 | Invalid Warp Sync | Safety | GPU-specific |
-| 3 | Scoped Sync Bugs | Correctness | GPU-specific |
+| 3 | Insufficient Atomic/Sync Scope | Correctness | GPU-specific |
 | 4 | Warp-divergence Race | Correctness | GPU-specific |
 | 5 | Uncoalesced Memory Access | Performance | GPU-specific |
 | 6 | Control-Flow Divergence | Performance | GPU-specific |
 | 7 | Bank Conflicts | Performance | GPU-specific |
 | 8 | Block-Size Dependence | Correctness | GPU-specific |
 | 9 | Launch Config Assumptions | Correctness | GPU-specific |
-| 10 | "Forgot Volatile" | Correctness | GPU-specific |
+| 10 | Missing Volatile/Fence | Correctness | GPU-specific |
 | 11 | Shared-Memory Data Races | Correctness | GPU-specific |
 | 12 | Redundant Barriers | Performance | GPU-specific |
 | 13 | Host ↔ Device Async Races | Correctness | GPU-specific |
 | 14 | Atomic Contention | Performance | GPU-amplified |
-| 15 | Deadlocks Beyond Barrier | Safety | GPU-amplified |
+| 15 | Non-Barrier Deadlocks | Safety | GPU-amplified |
 | 16 | Kernel Non-Termination | Safety | GPU-amplified |
 | 17 | Global-Memory Data Races | Correctness | CPU-shared |
 | 18 | Memory Safety | Safety | CPU-shared |
@@ -74,8 +79,8 @@ __global__ void k(float* a) {
   * **Static check (GPUVerify-style):** prove that each barrier is reached by all threads in the relevant scope, often via uniformity reasoning.([Nathan Chong][1])
   * **Dynamic check:** synccheck-style runtime validation, and Simulee-style bug finding.([zhangyuqun.github.io][19])
 
-#### How gpu_ext should use it
-  Make this a *hard* verifier rule: gpu_ext policy code must not contain any block-wide barrier primitive (or any helper that can implicitly behave like a block-wide barrier). If you ever allow barriers in policy code, require **warp-/block-uniform control flow** for any path reaching a barrier (uniform predicate analysis), otherwise reject. Simplest and strongest: **forbid `__syncthreads()` inside policies** — this directly eliminates an entire class of GPU hangs.
+#### Verification implications
+  Make this a *hard* verifier rule: policy code must not contain any block-wide barrier primitive (or any helper that can implicitly behave like a block-wide barrier). If you ever allow barriers in policy code, require **warp-/block-uniform control flow** for any path reaching a barrier (uniform predicate analysis), otherwise reject. Simplest and strongest: **forbid `__syncthreads()` inside policies** — this directly eliminates an entire class of GPU hangs.
 
 ---
 
@@ -104,12 +109,12 @@ __global__ void k(int* out) {
   * Runtime validation via `synccheck`.
   * Static analysis to verify mask correctness at each `__syncwarp` callsite.
 
-#### How gpu_ext should use it
-  If gpu_ext policies can ever emit warp-level sync or cooperative-groups barriers, require a *verifiable* mask discipline: e.g., only `__syncwarp(0xffffffff)` (full mask) or masks proven to equal the active mask at the callsite. Otherwise, simplest is: **ban warp sync primitives entirely** inside policies.
+#### Verification implications
+  If policies can ever emit warp-level sync or cooperative-groups barriers, require a *verifiable* mask discipline: e.g., only `__syncwarp(0xffffffff)` (full mask) or masks proven to equal the active mask at the callsite. Otherwise, simplest is: **ban warp sync primitives entirely** inside policies.
 
 ---
 
-### 3) Scoped Synchronization Bugs — Correctness, GPU-specific
+### 3) Insufficient Atomic/Sync Scope — Correctness, GPU-specific
 
 #### What it is / why it matters
   GPU adds *scope* and memory-model subtleties that don't exist on CPUs. **Scoped races** occur when synchronization/atomics are done at an insufficient scope (e.g., using `atomicAdd_block` when `atomicAdd` with device scope is needed). This is a distinct GPU bug class because scope semantics are unique to CUDA's memory model.
@@ -131,7 +136,7 @@ __global__ void k(int* counter) {
   * **Scope verification:** ensure atomics/sync use sufficient scope for the access pattern.
   * Require explicit scope annotations and validate against access patterns.
 
-#### How gpu_ext should use it
+#### Verification implications
   Treat scope as part of the verifier contract: if policies do atomic/synchronizing operations, require the *strongest* allowed scope (or forbid nontrivial scope usage). Practically: ban cross-block shared global updates unless they're done through a small set of "safe" helpers (e.g., per-SM/per-warp buffers → host aggregation). If policies use scoped atomics, require the scope to be explicit and conservative.
 
 ---
@@ -160,7 +165,7 @@ __global__ void k(int* A) {
   * **Verifier rule:** treat "lane-divergent side effects" as forbidden unless proven safe.
   * Require that any helper with side effects is guarded by a **warp-uniform predicate** or executed only by a designated lane (e.g., lane0). Then the verifier only needs to prove **uniformity** (or single-lane execution), not full SIMT interleavings.
 
-#### How gpu_ext should use it
+#### Verification implications
   Enforce warp-uniform control flow for policy side effects. If divergence is unavoidable, force "single-lane execution" patterns where only lane0 performs the side effect. This eliminates warp-divergence races by construction.
 
 ---
@@ -188,7 +193,7 @@ __global__ void k(float* a, int stride) {
 #### Checking approach
   * **Static analysis (GPUDrano/GPUCheck-style):** analyze address expressions in terms of lane-to-address stride; flag when stride exceeds coalescing thresholds.([CAV17][23])
 
-#### How gpu_ext should use it
+#### Verification implications
   If you want "performance as correctness," this is a flagship rule: restrict policy memory ops to patterns provably coalesced (e.g., affine, lane-linear indexing with small stride), and/or require warp-level aggregation so only one lane performs global updates. Require map operations to use **warp-uniform keys** or **contiguous per-lane indices** (e.g., `base + lane_id`), not random hashes. If policies must do random accesses, restrict them to **lane0 only**, amortizing the uncoalesced behavior to 1 lane/warp.
 
 ---
@@ -216,7 +221,7 @@ __global__ void k(float* out, float* in) {
 #### Checking approach
   * **Static taint + symbolic reasoning (GPUCheck-style):** identify conditions dependent on thread/lane id, and prove whether divergence is possible.([WebDocs][11])
 
-#### How gpu_ext should use it
+#### Verification implications
   Divergence is the *core reason* you can treat performance as correctness. Enforce **warp-uniform control flow** for policies (or at least for any code path that triggers side effects / heavy helpers). If you can't prove uniformity, force "single-lane execution" of policy side effects (others become no-ops) to prevent warp amplification. Put a hard cap on the number of helper calls on any path, to bound the "divergence amplification factor."
 
 ---
@@ -244,7 +249,7 @@ __global__ void k(int* out) {
 #### Checking approach
   * **Static heuristic:** classify shared-memory index expressions by lane stride and bank mapping; warn if likely conflict.
 
-#### How gpu_ext should use it
+#### Verification implications
   If policies use shared scratchpads (e.g., per-block staging), either forbid it or enforce a **conflict-free access pattern** (e.g., contiguous per-lane indexing). Most observability policies can avoid shared memory entirely, turning this into a rule: "no shared-memory accesses in policy." Or simply ban shared-memory indexing by untrusted lane-dependent expressions.
 
 ---
@@ -252,17 +257,24 @@ __global__ void k(int* out) {
 ### 8) Block-Size Dependence — Correctness, GPU-specific
 
 #### What it is / why it matters
-  Block-size independence is essential for safe block-size tuning. Kernels that implicitly depend on specific `blockDim` values can produce incorrect results or races when launched with different configurations. This is critical for auto-tuning and portability across GPU generations.
+  Block-size independence is essential for safe block-size tuning. Kernels that implicitly depend on specific `blockDim` values can produce incorrect results or races when launched with different configurations. This is critical for auto-tuning and portability across GPU generations. This entry focuses on **compile-time hardcoded assumptions** within the kernel code itself (e.g., fixed shared memory sizes, hardcoded reduction strides), distinct from runtime launch configuration assumptions about grid dimensions.
 
 #### Bug example
 
 ```cuda
-__global__ void k(float* out, float* in) {
-  // Assumes blockDim.x == 256, uses hardcoded shared memory size
+__global__ void reduce(float* out, float* in) {
   __shared__ float s[256];
-  s[threadIdx.x] = in[threadIdx.x];  // OOB if blockDim.x > 256
-  // ...
+  int tid = threadIdx.x;
+  s[tid] = in[blockIdx.x * blockDim.x + tid];
+  __syncthreads();
+  // Hardcoded reduction assumes exactly 256 threads
+  if (tid < 128) s[tid] += s[tid + 128];  // OOB read if blockDim.x < 256
+  __syncthreads();                         // incomplete reduction if blockDim.x > 256
+  if (tid < 64) s[tid] += s[tid + 64];
+  // ... continues with warp-level reduction ...
+  if (tid == 0) out[blockIdx.x] = s[0];
 }
+// Launched with blockDim.x != 256 => wrong results or crash
 ```
 
 #### Seen in / checked by
@@ -272,23 +284,34 @@ __global__ void k(float* out, float* in) {
   * **Static analysis (GPUDrano):** analyze kernel code for implicit blockDim dependencies.
   * Require explicit declaration of block-size assumptions in kernel metadata.
 
-#### How gpu_ext should use it
-  Policies should not implicitly assume block shapes unless gpu_ext can guarantee them. If a policy depends on block-level structure, require declaring it (metadata) and validate at attach time. Add verifier rules that forbid hard-coded assumptions about blockDim unless explicitly declared.
+#### Verification implications
+  Policies should not implicitly assume block shapes unless the verifier can guarantee them. If a policy depends on block-level structure, require declaring it (metadata) and validate at attach time. Add verifier rules that forbid hard-coded assumptions about blockDim unless explicitly declared.
 
 ---
 
 ### 9) Launch Config Assumptions — Correctness, GPU-specific
 
 #### What it is / why it matters
-  Many CUDA kernels assume certain launch configurations (e.g., single block, specific grid dimensions). Violating these assumptions leads to incorrect results or races that are hard to diagnose.
+  Many CUDA kernels assume certain launch configurations (e.g., single block, specific grid dimensions). Violating these assumptions leads to incorrect results or races that are hard to diagnose. This entry focuses on **runtime launch configuration assumptions** (gridDim, number of blocks), distinct from compile-time hardcoded block-size dependencies within the kernel code.
 
 #### Bug example
 
 ```cuda
-__global__ void reduce(float* out, float* in) {
-  // assumes gridDim.x == 1, but caller launches >1 blocks => wrong result / race
-  // ...
+__global__ void reduce(float* out, float* in, int n) {
+  __shared__ float s[256];
+  int tid = threadIdx.x;
+  int i = blockIdx.x * blockDim.x + tid;
+  s[tid] = (i < n) ? in[i] : 0.0f;
+  __syncthreads();
+  for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+    if (tid < stride) s[tid] += s[tid + stride];
+    __syncthreads();
+  }
+  if (tid == 0) {
+    *out = s[0];  // BUG: assumes gridDim.x == 1, writes final result directly
+  }              // if gridDim.x > 1, multiple blocks race on *out
 }
+// Called with <<<N/256, 256>>> where N > 256 => data race, wrong result
 ```
 
 #### Seen in / checked by
@@ -298,12 +321,12 @@ __global__ void reduce(float* out, float* in) {
   * **Contract checking:** encode launch preconditions (gridDim, blockDim assumptions) and enforce them at runtime or statically.
   * Add runtime assertions for grid/block dimension assumptions.
 
-#### How gpu_ext should use it
+#### Verification implications
   If policy code assumes a particular block/warp mapping (e.g., keys use `threadIdx.x` directly), you can end up with correctness or performance regressions when kernels run under different launch configs. If a policy depends on warp- or block-level structure, require declaring it (metadata) and validate at attach time.
 
 ---
 
-### 10) "Forgot Volatile" / Memory Visibility Pitfalls — Correctness, GPU-specific
+### 10) Missing Volatile/Fence — Correctness, GPU-specific
 
 #### What it is / why it matters
   GPU code often relies on compiler and memory-model subtleties. GKLEE reports a real-world category: forgetting to mark a shared memory variable as `volatile`, producing stale reads/writes due to compiler optimization or caching behavior. This is a GPU-flavored instance of memory visibility/ordering bugs that can be hard to reproduce.([Lingming Zhang][18])
@@ -325,7 +348,7 @@ while (flag == 0) { }         // may spin if compiler hoists load / visibility i
   * **Symbolic exploration (GKLEE-style):** explore memory access orderings and detect stale read scenarios.([Lingming Zhang][18])
   * **Pattern-based linting:** flag spin-wait loops on shared memory without volatile or fence.
 
-#### How gpu_ext should use it
+#### Verification implications
   Avoid exposing raw shared/global memory communication to policies; instead provide **helpers with explicit semantics** (e.g., "atomic increment" or "write once" patterns), and verify policies don't implement ad-hoc synchronization loops. Forbid spin-waiting on shared memory in policy code.
 
 ---
@@ -359,7 +382,7 @@ __global__ void k(int* g) {
   * **Static verifier route (GPUVerify-style):** enforce "race-free under SIMT" by proving that any two potentially concurrent lanes/threads cannot perform conflicting accesses without proper synchronization.([Nathan Chong][1])
   * **Dynamic route (Simulee-style):** instrument / simulate memory accesses and flag conflicting pairs; good for bug-finding and regression tests.([zhangyuqun.github.io][19])
 
-#### How gpu_ext should use it
+#### Verification implications
   If policies have any shared state, require **warp-uniform side effects** or **single-lane side effects** (e.g., lane0 updates) plus explicit atomics. A conservative verifier rule is: policy code cannot write shared memory except via restricted helpers that are race-safe (e.g., per-warp aggregation).
 
   * **Option A – warp-/block-uniform single-writer rules** (e.g., "only lane 0 updates").
@@ -394,8 +417,8 @@ __global__ void k(int* out) {
 #### Checking approach
   * **Static/dynamic dependence analysis:** determine whether any read-after-write / write-after-read across threads is protected by the barrier; if not, barrier is removable (Simulee/AuCS angle).([zhangyuqun.github.io][19])
 
-#### How gpu_ext should use it
-  For gpu_ext, this supports your "performance = safety" story: even "correct" policies can be unacceptable if they introduce barrier overhead. Since policies should avoid barriers entirely, you can convert this into a simpler rule: **"no barriers in policy,"** and separately "policy overhead must be bounded," eliminating this issue by construction. If helpers include barriers internally, you need cost models or architectural restrictions.
+#### Verification implications
+  This supports the "performance = safety" story: even "correct" policies can be unacceptable if they introduce barrier overhead. Since policies should avoid barriers entirely, you can convert this into a simpler rule: **"no barriers in policy,"** and separately "policy overhead must be bounded," eliminating this issue by construction. If helpers include barriers internally, you need cost models or architectural restrictions.
 
 ---
 
@@ -421,8 +444,8 @@ cudaMemcpy(h_data, d_data, N * sizeof(int), cudaMemcpyDeviceToHost);  // race wi
 #### Checking approach
   * **Dynamic detection (CuSan-style):** instrument host-side CUDA API calls and detect ordering violations at runtime.
 
-#### How gpu_ext should use it
-  If gpu_ext policies interact with host-visible buffers or involve asynchronous map copies, define a strict **lifetime & ordering contract** (e.g., "policy writes are only consumed after a guaranteed sync point"). For testing, integrate CuSan into CI for host-side integration tests of the runtime/loader.
+#### Verification implications
+  If policies interact with host-visible buffers or involve asynchronous map copies, define a strict **lifetime & ordering contract** (e.g., "policy writes are only consumed after a guaranteed sync point"). For testing, integrate CuSan into CI for host-side integration tests of the runtime/loader.
 
 ---
 
@@ -449,12 +472,12 @@ __global__ void k(int* counter) {
   * **Benchmarking:** use atomic contention benchmarks to calibrate safe budgets.
   * **Static analysis:** identify hot atomic targets and warn about contention risk.
 
-#### How gpu_ext should use it
+#### Verification implications
   Treat "atomic frequency + contention risk" as a verifier-enforced budget: e.g., allow at most one global atomic per warp, or require warp-aggregated updates. For evaluation, you can reuse the open benchmark suite to calibrate "safe budgets" per GPU generation. Consider requiring warp-level reduction before global atomics to reduce contention by 32x.
 
 ---
 
-### 15) Deadlocks Beyond Barrier Divergence (locks/spin + SIMT lockstep + named-barrier misuse) — Safety, GPU-amplified
+### 15) Non-Barrier Deadlocks — Safety, GPU-amplified
 
 #### What it is / why it matters
   Besides barrier divergence (which is specifically about `__syncthreads` under divergent control flow), SIMT lockstep can create deadlocks in other patterns that are unusual on CPUs: spin-waiting, lock contention within a warp, and named-barrier misuse. Warp-specialized kernels often use **named barriers** or structured synchronization patterns between warps/roles (producer/consumer). Bugs include: (a) spin deadlock due to missing signals, (b) unsafe barrier reuse ("recycling") across iterations, (c) races between producers/consumers.
@@ -487,7 +510,7 @@ __global__ void k(int* flag, int* data) {
   * **Protocol verification (WEFT-style):** for specific synchronization patterns, prove deadlock freedom + race freedom + safe reuse. Model barrier instances across loop iterations and prove safe reuse.([zhangyuqun.github.io][19])
   * **Symbolic exploration (GKLEE-style):** explore possible interleavings and detect deadlock states.([Lingming Zhang][18])
 
-#### How gpu_ext should use it
+#### Verification implications
   Ban blocking primitives in policy code (locks, spin loops, waiting on global conditions). Add a verifier rule: **no unbounded loops / no "wait until" patterns**. If you absolutely need synchronization, force "single-lane, nonblocking" patterns and bounded retries. Policies must not interact with named barriers (no waits, no signals). This aligns with the availability story: policies must not create device stalls.
 
 ---
@@ -513,7 +536,7 @@ __global__ void k(int* flag) {
   * **Static bounds analysis:** prove loop termination or enforce compile-time bounded loops.
   * **Runtime watchdog:** timeout-based detection (coarse but practical).
 
-#### How gpu_ext should use it
+#### Verification implications
   This is where "bounded overhead = correctness" is easiest to justify: enforce a **strict instruction/iteration bound** for policy code (like eBPF on CPU). If policies may contain loops, require compile-time bounded loops only, with conservative upper bounds.
 
 ---
@@ -542,7 +565,7 @@ __global__ void k(int* g, int n) {
   * **Static verification:** extend race-freedom proofs to global memory accesses.
   * **Dynamic detection:** instrument global memory accesses and track conflicting pairs.
 
-#### How gpu_ext should use it
+#### Verification implications
   If policies can write to global memory (maps, counters, logs), require either: (1) warp-uniform single-writer rules, (2) atomic-only helpers, or (3) per-thread/per-warp sharding. Ban unprotected global writes from policies.
 
 ---
@@ -590,11 +613,11 @@ __global__ void k() {
   * **PTX-level instrumentation (Guardian-style):** insert bounds checks and interception to fence illegal accesses.([arXiv][22])
   * **Tagging mechanisms (cuCatch-style):** track allocation ownership and validate access rights.([d1qx31qr3h6wln.cloudfront.net][20])
 
-#### How gpu_ext should use it
-  This is the "classic verifier" portion: keep eBPF-like pointer tracking, bounds checks, and restricted helpers. Easiest for policies is to **ban arbitrary pointer dereferences** and force all memory access through safe helpers (maps/ringbuffers). Ideally: policies cannot allocate/free; all policy-visible objects are managed by gpu_ext runtime and remain valid across policy execution (no UAF/UAS by construction). Also add a testing story: run policy-enabled kernels under Compute Sanitizer memcheck in CI for regression.
+#### Verification implications
+  This is the "classic verifier" portion: keep eBPF-like pointer tracking, bounds checks, and restricted helpers. Easiest for policies is to **ban arbitrary pointer dereferences** and force all memory access through safe helpers (maps/ringbuffers). Ideally: policies cannot allocate/free; all policy-visible objects are managed by the extension runtime and remain valid across policy execution (no UAF/UAS by construction). Also add a testing story: run policy-enabled kernels under Compute Sanitizer memcheck in CI for regression.
 
 #### Multi-tenant implications
-  In spatial sharing (streams/MPS), kernels share a GPU address space. An OOB access by one application can crash other co-running applications (fault isolation issue). Guardian's motivation explicitly calls out this problem and designs PTX-level fencing + interception as a fix.([arXiv][22]) This directly supports the "availability is correctness" story: if gpu_ext policies run in privileged/shared contexts, you must prevent policy code from generating OOB accesses. Either: (a) only allow map helpers (no raw memory), or (b) instrument policy memory ops with bounds checks (Guardian-style PTX rewriting).
+  In spatial sharing (streams/MPS), kernels share a GPU address space. An OOB access by one application can crash other co-running applications (fault isolation issue). Guardian's motivation explicitly calls out this problem and designs PTX-level fencing + interception as a fix.([arXiv][22]) This directly supports the "availability is correctness" story: if policies run in privileged/shared contexts, you must prevent policy code from generating OOB accesses. Either: (a) only allow map helpers (no raw memory), or (b) instrument policy memory ops with bounds checks (Guardian-style PTX rewriting).
 
 #### Bug example (multi-tenant OOB, conceptual)
 
@@ -613,7 +636,7 @@ __global__ void k(float* out, float* in, int n) {
 ```
 
 #### Uninitialized Memory — additional notes
-  Accessing device global memory without initialization leads to nondeterministic behavior. This is a frequent source of heisenbugs because GPU concurrency amplifies nondeterminism. Compute Sanitizer `initcheck` reports cases where device global memory is accessed without being initialized.([NVIDIA Docs][3]) For gpu_ext policies, require explicit initialization semantics (e.g., map lookup returns "not found" unless initialized; forbid reading uninitialized slots).
+  Accessing device global memory without initialization leads to nondeterministic behavior. This is a frequent source of heisenbugs because GPU concurrency amplifies nondeterminism. Compute Sanitizer `initcheck` reports cases where device global memory is accessed without being initialized.([NVIDIA Docs][3]) For policies, require explicit initialization semantics (e.g., map lookup returns "not found" unless initialized; forbid reading uninitialized slots).
 
 ---
 
@@ -641,7 +664,7 @@ __global__ void k(int* out, int* in, int divisor) {
   * **Model checking (ESBMC-GPU):** static verification of arithmetic properties.
   * **Lightweight runtime checks:** guard div/mod operations.
 
-#### How gpu_ext should use it
+#### Verification implications
   Optional but reviewer-friendly: add lightweight verifier checks for div-by-zero and dangerous shifts, and constrain pointer arithmetic (already typical in eBPF verifiers). For "perf correctness," overflow in index computations is a common hidden cause of random/uncoalesced patterns.
 
 ---
@@ -650,7 +673,7 @@ __global__ void k(int* out, int* in, int divisor) {
 
 Wu et al.'s empirical study explicitly groups CUDA-specific synchronization issues into three concrete bug types: **data race**, **barrier divergence**, and **redundant barrier functions**. They also highlight that these often manifest as inferior performance and flaky tests. Simulee is used to find these categories in real projects.([arXiv][21])
 
-This is exactly the "verification story" hook for gpu_ext: your verifier can claim that policy code cannot introduce these synchronization root causes because:
+This is exactly the "verification story" hook: a GPU extension verifier can claim that policy code cannot introduce these synchronization root causes because:
 * no barriers allowed,
 * warp-uniform side effects enforced,
 * bounded helper calls,
