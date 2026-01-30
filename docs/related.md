@@ -1,32 +1,4 @@
-我又把之前那份“bug/verification 点”的清单重新做了一次 **去重 + 补全（重点扫开源项目）+ CPU vs GPU 归类**。下面是我建议你在 paper 里使用的一套 **canonical taxonomy**（英文列表），同时我会先把“重复/需要修正”的地方说清楚，再给出补上的遗漏项与每项的 gpu_ext 用法。
 
-## 0. 去重与需要修正的点（你可以直接放到 rebuttal/related work 里）
-
-1. **“deadlock” vs “barrier divergence”重复**
-
-   * barrier divergence（在 `__syncthreads()`/barrier 处线程分歧）本质上是 GPU 上最常见、最典型的 deadlock/liveness failure 诱因之一；所以建议：
-   * **单列 “Barrier Divergence / Invalid Barrier Usage”** 作为 GPU 特有、可直接导致 hang 的 liveness bug；
-   * 再单列 “Other Deadlocks / Liveness Bugs（locks/spin/cross-scope sync）”。
-     论文与工具里也常这样分：GPUVerify 把“barrier divergence”当成核心 defect；AuCS/Wu/Simulee 也把它当作主要 sync bug 类型之一。([Nathan Chong][1])
-
-2. **“uncoalesced” vs “non-coalesceable memory access”重复（同义项）**
-
-   * GPUDrano 叫 *uncoalesced memory accesses*；GPUCheck 叫 *non‑coalesceable memory accesses*。本质都是：warp 内地址模式导致 memory transaction 被拆成很多次。([GitHub][2])
-   * 建议合并成一个条目：**Uncoalesced / Non‑coalesceable Memory Access Patterns**。
-
-3. **“data race”条目需要拆成 3 个子类，否则会混**
-
-   * (a) **shared memory（块内共享内存）race**：Compute Sanitizer 的 racecheck 主要就盯这个。([NVIDIA Docs][3])
-   * (b) **global memory race**：ScoRD/iGUARD 强调很多 detector 反而忽略 global memory races，且 GPU 上还牵涉 *scope* 概念（block/device/system）。([CSA - IISc Bangalore][4])
-   * (c) **host↔device async race**：CuSan 专门针对“异步 CUDA 调用与 host 之间的数据竞争”。([GitHub][5])
-     这三类都叫 race，但对 gpu_ext 的 verifier/linter 规则完全不同，必须拆开。
-
-4. **“同步 bug”条目重复：应当用 AuCS/Wu 的三分法作为主干**
-
-   * AuCS 明确把 CUDA sync bugs 的“大头”总结成三类：**data race / barrier divergence / redundant barrier**。([Shinhwei][6])
-   * 你 paper 里可以先用这个三分法做“审稿人可理解的主干”，然后再扩展到 scope/ITS/CG 等“新 CUDA 特性引入的新 bug”。iGUARD 就是专门补这些“新特性 bug”。([Aditya K Kamath][7])
-
----
 
 ## 1. Canonical bug list (dedup + filled from OSS scan)
 
@@ -41,7 +13,7 @@
 ### 1) Barrier Divergence at Block Barriers (`__syncthreads`) — GPU-specific, GPU-amplified (liveness)
 
 * **What it is / why it matters.**
-  A block-wide barrier requires *all* threads in the block to reach it. If the barrier is placed under a condition that evaluates differently across threads, some threads wait forever → deadlock / kernel hang. This is treated as a first-class defect in GPU kernel verification (e.g., "barrier divergence" in GPUVerify), and is also one of the main CUDA synchronization bug types characterized/targeted by AuCS/Wu. Tools like Compute Sanitizer `synccheck` report "divergent thread(s) in block" for this pattern; Oclgrind can also detect barrier divergence (OpenCL).([Nathan Chong][1])
+  A block-wide barrier requires *all* threads in the block to reach it. If the barrier is placed under a condition that evaluates differently across threads, some threads wait forever → deadlock / kernel hang. This is treated as a first-class defect in GPU kernel verification (e.g., "barrier divergence" in GPUVerify), and is also one of the main CUDA synchronization bug types characterized/targeted by AuCS/Wu.
 
 * **Bug example.**
 
@@ -52,15 +24,34 @@ __global__ void k(float* a) {
 }
 ```
 
+* **Seen in / checked by.**
+  * GPUVerify: checking divergence is a core goal ("divergence freedom").([Nathan Chong][1])
+  * Simulee detects **barrier divergence bugs** in real-world code.([zhangyuqun.github.io][19])
+  * Wu et al.: explicitly defines barrier divergence and places it under improper synchronization.([arXiv][21])
+  * Tools like Compute Sanitizer `synccheck` report "divergent thread(s) in block"; Oclgrind can also detect barrier divergence (OpenCL).
+
+* **Checking approach.**
+  * **Static check (GPUVerify-style):** prove that each barrier is reached by all threads in the relevant scope, often via uniformity reasoning.([Nathan Chong][1])
+  * **Dynamic check:** synccheck-style runtime validation, and Simulee-style bug finding.([zhangyuqun.github.io][19])
+
 * **How gpu_ext should use it.**
-  Make this a *hard* verifier rule: gpu_ext policy code must not contain any block-wide barrier primitive (or any helper that can implicitly behave like a block-wide barrier). If you ever allow barriers in policy code, require **warp-/block-uniform control flow** for any path reaching a barrier (uniform predicate analysis), otherwise reject.
+  Make this a *hard* verifier rule: gpu_ext policy code must not contain any block-wide barrier primitive (or any helper that can implicitly behave like a block-wide barrier). If you ever allow barriers in policy code, require **warp-/block-uniform control flow** for any path reaching a barrier (uniform predicate analysis), otherwise reject. Simplest and strongest: **forbid `__syncthreads()` inside policies** — this directly eliminates an entire class of GPU hangs.
 
 ---
 
 ### 2) Invalid Warp Synchronization (`__syncwarp` mask, warp-level barriers) — GPU-specific
 
 * **What it is / why it matters.**
-  Warp-level sync requires correct participation masks. A common failure is calling `__syncwarp(mask)` where not all lanes that reach the barrier are included in `mask`, or where divergence causes only a subset to arrive. `synccheck` explicitly reports “Invalid arguments” and “Divergent thread(s) in warp” classes for these hazards, and iGUARD discusses how newer CUDA features (e.g., independent thread scheduling + cooperative groups) create new race/sync hazards beyond the classic model.([NERSC Documentation][8])
+  Warp-level sync requires correct participation masks. A common failure is calling `__syncwarp(mask)` where not all lanes that reach the barrier are included in `mask`, or where divergence causes only a subset to arrive.
+
+* **Seen in / checked by.**
+  * Compute Sanitizer `synccheck` explicitly reports "Invalid arguments" and "Divergent thread(s) in warp" classes for these hazards.([NERSC Documentation][8])
+  * iGUARD discusses how newer CUDA features (e.g., independent thread scheduling + cooperative groups) create new race/sync hazards beyond the classic model.([Aditya K Kamath][7])
+
+* **Checking approach.**
+  * Runtime validation via `synccheck`.
+  * Static analysis to verify mask correctness at each `__syncwarp` callsite.
+
 * **How gpu_ext should use it.**
   If gpu_ext policies can ever emit warp-level sync or cooperative-groups barriers, require a *verifiable* mask discipline: e.g., only `__syncwarp(0xffffffff)` (full mask) or masks proven to equal the active mask at the callsite. Otherwise, simplest is: **ban warp sync primitives entirely** inside policies.
 
@@ -69,7 +60,7 @@ __global__ void k(float* a) {
 ### 3) Shared-Memory Data Races (`__shared__`) — CPU-shared, GPU-amplified
 
 * **What it is / why it matters.**
-  Threads in a block access on-chip shared memory concurrently; missing/incorrect synchronization causes races. This is a classic CUDA bug class (AuCS/Wu), and vendor tooling targets it directly: Compute Sanitizer `racecheck` is a runtime shared-memory hazard detector. GPUVerify also aims to prove race-freedom (including barrier-related races).([Shinhwei][6])
+  Threads in a block access on-chip shared memory concurrently; missing/incorrect synchronization causes races. This is a classic CUDA bug class (AuCS/Wu).
 
 * **Bug example.**
 
@@ -84,17 +75,29 @@ __global__ void k(int* g) {
 }
 ```
 
+* **Seen in / checked by.**
+  * GPUVerify explicitly targets **data-race freedom** and defines intra-group / inter-group races.([Nathan Chong][1])
+  * GKLEE reports finding **races** (and related deadlocks) via symbolic exploration.([Lingming Zhang][18])
+  * Simulee detects **data race bugs** in real projects and uses a CUDA-aware notion of race.([zhangyuqun.github.io][19])
+  * Wu et al. classify **data race** under "improper synchronization" as a CUDA-specific root cause.([arXiv][21])
+  * Compute Sanitizer `racecheck` is a runtime shared-memory hazard detector.([Shinhwei][6])
+
+* **Checking approach.**
+  * **Static verifier route (GPUVerify-style):** enforce "race-free under SIMT" by proving that any two potentially concurrent lanes/threads cannot perform conflicting accesses without proper synchronization.([Nathan Chong][1])
+  * **Dynamic route (Simulee-style):** instrument / simulate memory accesses and flag conflicting pairs; good for bug-finding and regression tests.([zhangyuqun.github.io][19])
+
 * **How gpu_ext should use it.**
-  If policies have any shared state, require **warp-uniform side effects** or **single-lane side effects** (e.g., lane0 updates) plus explicit atomics. A conservative verifier rule is: policy code cannot write shared memory except via restricted helpers that are race-safe (e.g., per-warp aggregation).
+  If policies have any shared state, require **warp-uniform side effects** or **single-lane side effects** (e.g., lane0 updates) plus explicit atomics. A conservative verifier rule is: policy code cannot write shared memory except via restricted helpers that are race-safe (e.g., per-warp aggregation). Options:
+  1. **warp-/block-uniform single-writer rules** (e.g., "only lane 0 updates"), or
+  2. **atomic-only helpers** for shared objects, or
+  3. **per-thread/per-warp sharding** (each lane updates its own slot).
 
 ---
 
 ### 4) Global-Memory Data Races + Scoped Race Bugs + Warp-divergence Race — CPU-shared, GPU-specific semantics
 
 * **What it is / why it matters.**
-  Races on global memory exist, but GPU adds *scope* and memory-model subtleties: "scoped races" can occur when synchronization/atomics are done at an insufficient scope. ScoRD explicitly argues that many GPU race detectors focus on shared memory and ignore global-memory races, and introduces *scoped races* due to insufficient scope. iGUARD further targets races introduced by "scoped synchronization" and advanced CUDA features.([CSA - IISc Bangalore][4])
-
-  A "warp-divergence race" (as described in GKLEE) is a GPU-specific phenomenon where **divergence changes which threads are effectively concurrent**, producing racy outcomes that don't map cleanly to CPU assumptions. This is one of the reasons "CPU-style race reasoning" doesn't port directly: SIMT execution order + reconvergence can create subtle concurrency patterns.([Lingming Zhang][18])
+  Races on global memory exist, but GPU adds *scope* and memory-model subtleties: "scoped races" can occur when synchronization/atomics are done at an insufficient scope. A "warp-divergence race" is a GPU-specific phenomenon where **divergence changes which threads are effectively concurrent**, producing racy outcomes that don't map cleanly to CPU assumptions.
 
 * **Bug example (scoped race).**
 
@@ -116,26 +119,41 @@ __global__ void k(int* A) {
 }
 ```
 
+* **Seen in / checked by.**
+  * ScoRD explicitly argues that many GPU race detectors focus on shared memory and ignore global-memory races, and introduces *scoped races* due to insufficient scope.([CSA - IISc Bangalore][4])
+  * iGUARD further targets races introduced by "scoped synchronization" and advanced CUDA features.([Aditya K Kamath][7])
+  * GKLEE explicitly lists "warp-divergence race" among discovered bug classes.([Lingming Zhang][18])
+  * Simulee stresses CUDA-aware race definitions and discusses GPU-specific race interpretation constraints.([zhangyuqun.github.io][19])
+
+* **Checking approach.**
+  * **Verifier rule:** treat "lane-divergent side effects" as forbidden unless proven safe.
+  * Require that any helper with side effects is guarded by a **warp-uniform predicate** or executed only by a designated lane (e.g., lane0). Then the verifier only needs to prove **uniformity** (or single-lane execution), not full SIMT interleavings.
+
 * **How gpu_ext should use it.**
-  Treat scope as part of the verifier contract: if policies do atomic/synchronizing operations, require the *strongest* allowed scope (or forbid nontrivial scope usage). Practically: ban cross-block shared global updates unless they're done through a small set of "safe" helpers (e.g., per-SM/per-warp buffers → host aggregation). For warp-divergence races, require that any helper with side effects is guarded by a **warp-uniform predicate** or executed only by a designated lane (e.g., lane0).
+  Treat scope as part of the verifier contract: if policies do atomic/synchronizing operations, require the *strongest* allowed scope (or forbid nontrivial scope usage). Practically: ban cross-block shared global updates unless they're done through a small set of "safe" helpers (e.g., per-SM/per-warp buffers → host aggregation).
 
 ---
 
 ### 5) Host ↔ Device Asynchronous Data Races (API ordering bugs) — CPU-shared-ish, GPU-specific in practice
 
 * **What it is / why it matters.**
-  CUDA exposes async kernel launches/memcpy/events; host code can race with device work if synchronization is missing. CuSan is an open-source detector for “data races between (asynchronous) CUDA calls and the host,” using Clang/LLVM instrumentation plus ThreadSanitizer. This is a major real-world bug source in heterogeneous programs and is *not* covered by pure kernel-only verifiers.([GitHub][5])
+  CUDA exposes async kernel launches/memcpy/events; host code can race with device work if synchronization is missing. This is a major real-world bug source in heterogeneous programs and is *not* covered by pure kernel-only verifiers.
+
+* **Seen in / checked by.**
+  * CuSan is an open-source detector for "data races between (asynchronous) CUDA calls and the host," using Clang/LLVM instrumentation plus ThreadSanitizer.([GitHub][5])
+
+* **Checking approach.**
+  * **Dynamic detection (CuSan-style):** instrument host-side CUDA API calls and detect ordering violations at runtime.
+
 * **How gpu_ext should use it.**
-  If gpu_ext policies interact with host-visible buffers or involve asynchronous map copies, define a strict **lifetime & ordering contract** (e.g., “policy writes are only consumed after a guaranteed sync point”). For testing, integrate CuSan into CI for host-side integration tests of the runtime/loader.
+  If gpu_ext policies interact with host-visible buffers or involve asynchronous map copies, define a strict **lifetime & ordering contract** (e.g., "policy writes are only consumed after a guaranteed sync point"). For testing, integrate CuSan into CI for host-side integration tests of the runtime/loader.
 
 ---
 
 ### 6) Deadlocks Beyond Barrier Divergence (locks/spin + SIMT lockstep + named-barrier misuse) — CPU-shared, GPU-amplified (+ sometimes GPU-specific)
 
 * **What it is / why it matters.**
-  Besides barrier divergence, SIMT lockstep can create deadlocks in patterns that are unusual on CPUs. iGUARD notes that lockstep execution can deadlock if threads within a warp use distinct locks—something not possible in typical CPU threading models. GKLEE also reports finding deadlocks via symbolic exploration of GPU kernels. ESBMC-GPU models and checks deadlock too.([Aditya K Kamath][7])
-
-  Warp-specialized kernels often use **named barriers** or structured synchronization patterns between warps/roles (producer/consumer). Bugs include: (a) deadlock, (b) unsafe barrier reuse ("recycling") across iterations, (c) races between producers/consumers. WEFT addresses exactly these properties and verifies deadlock freedom, safe barrier recycling, and race freedom for producer-consumer synchronization.([zhangyuqun.github.io][19])
+  Besides barrier divergence, SIMT lockstep can create deadlocks in patterns that are unusual on CPUs. Warp-specialized kernels often use **named barriers** or structured synchronization patterns between warps/roles (producer/consumer). Bugs include: (a) deadlock, (b) unsafe barrier reuse ("recycling") across iterations, (c) races between producers/consumers.
 
 * **Bug example (spin deadlock).**
 
@@ -155,26 +173,42 @@ __global__ void k(int* flag, int* data) {
 // Bug: consumer waits on wrong barrier instance / reused incorrectly in loop
 ```
 
+* **Seen in / checked by.**
+  * iGUARD notes that lockstep execution can deadlock if threads within a warp use distinct locks.([Aditya K Kamath][7])
+  * GKLEE reports finding deadlocks via symbolic exploration of GPU kernels.([Lingming Zhang][18])
+  * ESBMC-GPU models and checks deadlock too.([GitHub][10])
+  * WEFT verifies **deadlock freedom**, **safe barrier recycling**, and **race freedom** for producer-consumer synchronization (named barriers).([zhangyuqun.github.io][19])
+
+* **Checking approach.**
+  * **Protocol verification (WEFT-style):** for specific synchronization patterns, prove deadlock freedom + race freedom + safe reuse. Model barrier instances across loop iterations and prove safe reuse.([zhangyuqun.github.io][19])
+  * **Symbolic exploration (GKLEE-style):** explore possible interleavings and detect deadlock states.([Lingming Zhang][18])
+
 * **How gpu_ext should use it.**
-  Ban blocking primitives in policy code (locks, spin loops, waiting on global conditions). Add a verifier rule: **no unbounded loops / no "wait until" patterns**. If you absolutely need synchronization, force "single-lane, nonblocking" patterns and bounded retries. Policies must not interact with named barriers (no waits, no signals).
+  Ban blocking primitives in policy code (locks, spin loops, waiting on global conditions). Add a verifier rule: **no unbounded loops / no "wait until" patterns**. If you absolutely need synchronization, force "single-lane, nonblocking" patterns and bounded retries. Policies must not interact with named barriers (no waits, no signals). This aligns with the availability story: policies must not create device stalls.
 
 ---
 
 ### 7) Kernel Non-Termination / Infinite Loops — CPU-shared, GPU-amplified
 
 * **What it is / why it matters.**
-  Infinite loops can hang GPU execution and are highlighted as GPU-specific bug concerns in GPU debugging work: CL-Vis explicitly calls out infinite loops (together with barrier divergence) as GPU-specific bug types to detect/handle. In practice, non-termination is especially dangerous because GPU preemption/recovery can be coarse.([Computing and Informatics][9])
+  Infinite loops can hang GPU execution. In practice, non-termination is especially dangerous because GPU preemption/recovery can be coarse.
+
+* **Seen in / checked by.**
+  * CL-Vis explicitly calls out infinite loops (together with barrier divergence) as GPU-specific bug types to detect/handle.([Computing and Informatics][9])
+
+* **Checking approach.**
+  * **Static bounds analysis:** prove loop termination or enforce compile-time bounded loops.
+  * **Runtime watchdog:** timeout-based detection (coarse but practical).
+
 * **How gpu_ext should use it.**
-  This is where “bounded overhead = correctness” is easiest to justify: enforce a **strict instruction/iteration bound** for policy code (like eBPF on CPU). If policies may contain loops, require compile-time bounded loops only, with conservative upper bounds.
+  This is where "bounded overhead = correctness" is easiest to justify: enforce a **strict instruction/iteration bound** for policy code (like eBPF on CPU). If policies may contain loops, require compile-time bounded loops only, with conservative upper bounds.
 
 ---
 
 ### 8) Memory Safety: Out-of-Bounds / Misaligned / Use-After-Free / Use-After-Scope — CPU-shared
 
 * **What it is / why it matters.**
-  Classic memory safety includes both **spatial** (OOB, misaligned) and **temporal** (UAF, UAS) violations. Compute Sanitizer `memcheck` precisely detects OOB/misaligned accesses (and can detect memory leaks), and Oclgrind reports invalid memory accesses in its simulator. ESBMC-GPU also checks pointer safety and array bounds as part of its model checking. GKLEE's evaluation includes out-of-bounds global memory accesses as error cases.([NVIDIA Docs][3])
-
-  Temporal bugs exist on GPUs too: pointers can outlive allocations (host frees while kernel still uses, device-side stack frame returns, etc.). cuCatch explicitly targets temporal violations using tagging mechanisms and discusses use-after-free and use-after-scope detection.([d1qx31qr3h6wln.cloudfront.net][20])
+  Classic memory safety includes both **spatial** (OOB, misaligned) and **temporal** (UAF, UAS) violations. Temporal bugs exist on GPUs too: pointers can outlive allocations (host frees while kernel still uses, device-side stack frame returns, etc.).
 
 * **Bug example (OOB).**
 
@@ -198,26 +232,45 @@ __global__ void k() {
 }
 ```
 
+* **Seen in / checked by.**
+  * Compute Sanitizer `memcheck` precisely detects OOB/misaligned accesses (and can detect memory leaks).([NVIDIA Docs][3])
+  * Oclgrind reports invalid memory accesses in its simulator.([GitHub][16])
+  * ESBMC-GPU checks pointer safety and array bounds as part of its model checking.([GitHub][10])
+  * GKLEE's evaluation includes out-of-bounds global memory accesses as error cases.([Lingming Zhang][18])
+  * Wu et al.: "unauthorized memory access" appears in root-cause characterization.([arXiv][21])
+  * cuCatch explicitly targets temporal violations using tagging mechanisms and discusses UAF/UAS detection.([d1qx31qr3h6wln.cloudfront.net][20])
+  * Guardian: PTX-level instrumentation + interception to fence illegal memory accesses under GPU sharing.([arXiv][22])
+
+* **Checking approach.**
+  * **Bounds-check instrumentation (Guardian/cuCatch-style):** insert base+bounds checks (or partition-fencing) around loads/stores.([arXiv][22])
+  * **Temporal tagging + runtime checks (cuCatch-style):** tag allocations and validate before deref.([d1qx31qr3h6wln.cloudfront.net][20])
+  * **Static verification (ESBMC-GPU):** model checking for pointer safety and array bounds.([GitHub][10])
+
 * **How gpu_ext should use it.**
-  This is the "classic verifier" portion: keep eBPF-like pointer tracking, bounds checks, and restricted helpers. Ideally: policies cannot allocate/free; all policy-visible objects are managed by gpu_ext runtime and remain valid across policy execution (no UAF/UAS by construction). Also add a testing story: run policy-enabled kernels under Compute Sanitizer memcheck in CI for regression.
+  This is the "classic verifier" portion: keep eBPF-like pointer tracking, bounds checks, and restricted helpers. Easiest for policies is to **ban arbitrary pointer dereferences** and force all memory access through safe helpers (maps/ringbuffers). Ideally: policies cannot allocate/free; all policy-visible objects are managed by gpu_ext runtime and remain valid across policy execution (no UAF/UAS by construction). Also add a testing story: run policy-enabled kernels under Compute Sanitizer memcheck in CI for regression.
 
 ---
 
 ### 9) Uninitialized Global Memory Reads — CPU-shared
 
 * **What it is / why it matters.**
-  Compute Sanitizer `initcheck` reports cases where device global memory is accessed without being initialized by device writes or CUDA memcpy/memset. This is a frequent source of heisenbugs because GPU concurrency amplifies nondeterminism.([NVIDIA Docs][3])
+  Accessing device global memory without initialization leads to nondeterministic behavior. This is a frequent source of heisenbugs because GPU concurrency amplifies nondeterminism.
+
+* **Seen in / checked by.**
+  * Compute Sanitizer `initcheck` reports cases where device global memory is accessed without being initialized by device writes or CUDA memcpy/memset.([NVIDIA Docs][3])
+
+* **Checking approach.**
+  * **Runtime detection (initcheck):** track memory initialization state and flag uninitialized reads.
+
 * **How gpu_ext should use it.**
-  If gpu_ext policies read from maps/buffers, require explicit initialization semantics (e.g., map lookup returns “not found” unless initialized; forbid reading uninitialized slots). In testing, run initcheck on representative workloads.
+  If gpu_ext policies read from maps/buffers, require explicit initialization semantics (e.g., map lookup returns "not found" unless initialized; forbid reading uninitialized slots). In testing, run initcheck on representative workloads.
 
 ---
 
 ### 10) Resource Management: Memory Leaks / Incorrect Allocation / Lifecycle Bugs — CPU-shared
 
 * **What it is / why it matters.**
-  Compute Sanitizer memcheck includes leak checking (e.g., `cudaMalloc` leaks, device heap leaks) and can also report incorrect use of `malloc/free()` in kernels. These are availability issues in long-running services.([NVIDIA Docs][3])
-
-  A lot of CUDA failures are not in kernel math but in lifecycle management: incorrect device allocation, memory leaks, early device reset calls, etc. Wu et al. highlight these as a major root-cause category ("improper resource management") and relate them to crashes.([arXiv][21])
+  A lot of CUDA failures are not in kernel math but in lifecycle management: incorrect device allocation, memory leaks, early device reset calls, etc. These are availability issues in long-running services.
 
 * **Bug example (early reset).**
 
@@ -227,24 +280,40 @@ kernel<<<...>>>(p);
 cudaDeviceReset();     // early reset => invalidates work / crashes
 ```
 
+* **Seen in / checked by.**
+  * Compute Sanitizer memcheck includes leak checking (e.g., `cudaMalloc` leaks, device heap leaks) and can also report incorrect use of `malloc/free()` in kernels.([NVIDIA Docs][3])
+  * Wu et al. highlight these as a major root-cause category ("improper resource management"): "incorrect device resource allocation, memory leak, early device call reset, unauthorized memory access."([arXiv][21])
+
+* **Checking approach.**
+  * **Host-side linters / runtime guards:** track allocation/free and enforce API ordering (this is outside kernel verifiers).
+  * **Runtime detection (memcheck):** detect leaks and invalid free operations.
+
 * **How gpu_ext should use it.**
-  Forbid dynamic allocation in policy code; if helpers allocate, require bounded allocations + automatic cleanup. Keep policy loading/unloading tied to safe lifecycle transitions (e.g., disallow unloading policies while kernels that might execute them are in flight). Treat leaks as "availability correctness," because persistent GPU agents/daemons can degrade over time.
+  Forbid dynamic allocation in policy code; if helpers allocate, require bounded allocations + automatic cleanup. Keep policy loading/unloading tied to safe lifecycle transitions (e.g., disallow unloading policies while kernels that might execute them are in flight). Make map lifetime explicit and externally managed. Treat leaks as "availability correctness," because persistent GPU agents/daemons can degrade over time.
 
 ---
 
 ### 11) Arithmetic Errors (overflow, division by zero) — CPU-shared
 
 * **What it is / why it matters.**
-  ESBMC-GPU explicitly lists arithmetic overflow and division-by-zero among the properties it checks for CUDA programs (alongside races/deadlocks/bounds). These errors can corrupt keys/indices and cascade into memory safety/perf disasters.([GitHub][10])
+  Arithmetic errors can corrupt keys/indices and cascade into memory safety/perf disasters.
+
+* **Seen in / checked by.**
+  * ESBMC-GPU explicitly lists arithmetic overflow and division-by-zero among the properties it checks for CUDA programs (alongside races/deadlocks/bounds).([GitHub][10])
+
+* **Checking approach.**
+  * **Model checking (ESBMC-GPU):** static verification of arithmetic properties.
+  * **Lightweight runtime checks:** guard div/mod operations.
+
 * **How gpu_ext should use it.**
-  Optional but reviewer-friendly: add lightweight verifier checks for div-by-zero and dangerous shifts, and constrain pointer arithmetic (already typical in eBPF verifiers). For “perf correctness,” overflow in index computations is a common hidden cause of random/uncoalesced patterns.
+  Optional but reviewer-friendly: add lightweight verifier checks for div-by-zero and dangerous shifts, and constrain pointer arithmetic (already typical in eBPF verifiers). For "perf correctness," overflow in index computations is a common hidden cause of random/uncoalesced patterns.
 
 ---
 
 ### 12) Uncoalesced / Non‑Coalesceable Global Memory Access Patterns — GPU-specific (perf → bounded interference)
 
 * **What it is / why it matters.**
-  Warp memory coalescing is a GPU-specific performance contract. GPUDrano provides static analysis to find uncoalesced accesses and explains coalescing in terms of warps and adjacent addresses; GPUCheck focuses on non-coalesceable accesses caused by thread-divergent expressions; GKLEE also flags memory coalescing issues as performance defects.([GitHub][2])
+  Warp memory coalescing is a GPU-specific performance contract. "Uncoalesced" accesses can cause large slowdowns (memory transactions split into many).
 
 * **Bug example.**
 
@@ -256,15 +325,23 @@ __global__ void k(float* a, int stride) {
 }
 ```
 
+* **Seen in / checked by.**
+  * GPUDrano: "detects uncoalesced global memory accesses" and treats them as performance bugs.([GitHub][2], [CAV17][23])
+  * GKLEE: reports "non-coalesced memory accesses" as performance bugs it finds.([Lingming Zhang][18])
+  * GPUCheck: detects "non-coalesceable memory accesses."([WebDocs][11])
+
+* **Checking approach.**
+  * **Static analysis (GPUDrano/GPUCheck-style):** analyze address expressions in terms of lane-to-address stride; flag when stride exceeds coalescing thresholds.([CAV17][23])
+
 * **How gpu_ext should use it.**
-  If you want "performance as correctness," this is a flagship rule: restrict policy memory ops to patterns provably coalesced (e.g., affine, lane-linear indexing with small stride), and/or require warp-level aggregation so only one lane performs global updates. For papers: cite GPUDrano/GPUCheck to justify why static analysis is needed.
+  If you want "performance as correctness," this is a flagship rule: restrict policy memory ops to patterns provably coalesced (e.g., affine, lane-linear indexing with small stride), and/or require warp-level aggregation so only one lane performs global updates. Require map operations to use **warp-uniform keys** or **contiguous per-lane indices** (e.g., `base + lane_id`), not random hashes. If policies must do random accesses, restrict them to **lane0 only**, amortizing the uncoalesced behavior to 1 lane/warp.
 
 ---
 
 ### 13) Control-Flow Divergence (warp branch divergence) — GPU-specific (perf, and interacts with liveness)
 
 * **What it is / why it matters.**
-  SIMT divergence serializes paths within a warp. GPUCheck explicitly targets "branch divergence" as a performance problem arising from thread-divergent expressions; GKLEE also treats warp divergence as a performance defect. Divergence is also the root cause of barrier divergence when barriers are in conditional code.([WebDocs][11])
+  SIMT divergence serializes paths within a warp, lowering "branch efficiency" and increasing worst-case overhead. Divergence is also the root cause of barrier divergence when barriers are in conditional code.
 
 * **Bug example.**
 
@@ -276,15 +353,23 @@ __global__ void k(float* out, float* in) {
 }
 ```
 
+* **Seen in / checked by.**
+  * GPUCheck explicitly targets "branch divergence" as a performance problem arising from thread-divergent expressions.([WebDocs][11])
+  * GKLEE: "divergent warps" as performance bugs.([Lingming Zhang][18])
+  * Wu et al.: "non-optimal implementation" includes performance loss causes like branch divergence.([arXiv][21])
+
+* **Checking approach.**
+  * **Static taint + symbolic reasoning (GPUCheck-style):** identify conditions dependent on thread/lane id, and prove whether divergence is possible.([WebDocs][11])
+
 * **How gpu_ext should use it.**
-  Enforce **warp-uniform control flow** for policies (or at least for any code path that triggers side effects / heavy helpers). If you can't prove uniformity, force "single-lane execution" of policy side effects (others become no-ops) to prevent warp amplification.
+  Divergence is the *core reason* you can treat performance as correctness. Enforce **warp-uniform control flow** for policies (or at least for any code path that triggers side effects / heavy helpers). If you can't prove uniformity, force "single-lane execution" of policy side effects (others become no-ops) to prevent warp amplification. Put a hard cap on the number of helper calls on any path, to bound the "divergence amplification factor."
 
 ---
 
 ### 14) Shared-Memory Bank Conflicts — GPU-specific (perf)
 
 * **What it is / why it matters.**
-  Bank conflicts are a shared-memory–specific performance pathology: accesses serialize when multiple lanes hit the same bank. GKLEE explicitly lists shared-memory bank conflicts among GPU performance defects it checks.([Peng Li's Homepage][12])
+  Bank conflicts are a shared-memory–specific performance pathology: accesses serialize when multiple lanes hit the same bank.
 
 * **Bug example.**
 
@@ -298,15 +383,21 @@ __global__ void k(int* out) {
 }
 ```
 
+* **Seen in / checked by.**
+  * GKLEE explicitly lists "memory bank conflicts" among detected performance bugs.([Peng Li's Homepage][12])
+
+* **Checking approach.**
+  * **Static heuristic:** classify shared-memory index expressions by lane stride and bank mapping; warn if likely conflict.
+
 * **How gpu_ext should use it.**
-  If policies use shared scratchpads (e.g., per-block staging), restrict addressing patterns (e.g., padding, structure-of-arrays) or simply ban shared-memory indexing by untrusted lane-dependent expressions.
+  If policies use shared scratchpads (e.g., per-block staging), either forbid it or enforce a **conflict-free access pattern** (e.g., contiguous per-lane indexing). Most observability policies can avoid shared memory entirely, turning this into a rule: "no shared-memory accesses in policy." Or simply ban shared-memory indexing by untrusted lane-dependent expressions.
 
 ---
 
 ### 15) Redundant Barriers (unnecessary `__syncthreads`) — CPU-shared-ish, GPU-specific impact (perf)
 
 * **What it is / why it matters.**
-  AuCS/Wu include "redundant barrier" as a major synchronization bug class; it doesn't break correctness but can severely degrade performance. GPURepair tooling also exists to insert/remove barriers to fix races and remove unnecessary ones.([Shinhwei][6])
+  A redundant barrier is a performance-pathology class: removing the barrier **does not introduce a race**, so the barrier was unnecessary overhead.
 
 * **Bug example.**
 
@@ -320,19 +411,26 @@ __global__ void k(int* out) {
 }
 ```
 
+* **Seen in / checked by.**
+  * Wu et al.: defines "redundant barrier function."([arXiv][21])
+  * Simulee: detects redundant barrier bugs and reports numbers across projects.([zhangyuqun.github.io][19])
+  * AuCS: repairs synchronization bugs, including redundant barriers.([Shinhwei][6])
+  * GPURepair tooling also exists to insert/remove barriers to fix races and remove unnecessary ones.([GitHub][17])
+
+* **Checking approach.**
+  * **Static/dynamic dependence analysis:** determine whether any read-after-write / write-after-read across threads is protected by the barrier; if not, barrier is removable (Simulee/AuCS angle).([zhangyuqun.github.io][19])
+
 * **How gpu_ext should use it.**
-  For gpu_ext, this supports your "performance = safety" story: even "correct" policies can be unacceptable if they introduce barrier overhead. The simplest policy-level stance: **ban barriers**; if helpers include barriers internally, you need cost models or architectural restrictions.
+  For gpu_ext, this supports your "performance = safety" story: even "correct" policies can be unacceptable if they introduce barrier overhead. Since policies should avoid barriers entirely, you can convert this into a simpler rule: **"no barriers in policy,"** and separately "policy overhead must be bounded," eliminating this issue by construction. If helpers include barriers internally, you need cost models or architectural restrictions.
 
 ---
 
-### 16) Configuration Sensitivity / Portability: Block-Size Dependence + Toolchain/Platform Variations — GPU-specific (correctness & tuning safety)
+### 16) Configuration Sensitivity / Portability: Block-Size Dependence + Launch Config Assumptions + Toolchain Variations — GPU-specific (correctness & tuning safety)
 
 * **What it is / why it matters.**
-  GPUDrano explicitly includes "block-size independence" analysis: changing block size (while keeping total threads) should not break program functionality, and this is essential for safe block-size tuning. This is a GPU-unique portability/correctness hazard.([GitHub][2])
+  Block-size independence is essential for safe block-size tuning. Many CUDA kernels assume certain launch configurations. CUDA code can also fail or misbehave when moved across platforms.
 
-  CUDA code can also fail or misbehave when moved across platforms (compiler versions, driver versions, GPU architectures). Wu et al. explicitly call this out as a root cause ("poor portability"), including cases where code uses deprecated intrinsics or assumes old shared-memory bank width that breaks on newer GPUs.([arXiv][21])
-
-* **Bug example (block-size dependence).**
+* **Bug example (launch config assumption).**
 
 ```cuda
 __global__ void reduce(float* out, float* in) {
@@ -341,15 +439,32 @@ __global__ void reduce(float* out, float* in) {
 }
 ```
 
+* **Seen in / checked by.**
+  * GPUDrano explicitly includes "block-size independence" analysis.([GitHub][2])
+  * Wu et al.'s discussion of detected bugs includes developer responses that kernels "should not be called with more than one block" and suggests adding assertions like `assert(gridDim.x == 1)`.([arXiv][21])
+  * Wu et al. explicitly call out "poor portability" as a root cause, including deprecated intrinsics and architecture assumptions.([arXiv][21])
+
+* **Checking approach.**
+  * **Contract checking:** encode launch preconditions (gridDim, blockDim assumptions) and enforce them at runtime or statically.
+  * **Static analysis (GPUDrano):** block-size independence analysis.([GitHub][2])
+
 * **How gpu_ext should use it.**
-  If policy code assumes a particular block/warp mapping (e.g., keys use `threadIdx.x` directly), you can end up with correctness or performance regressions when kernels run under different launch configs. Add verifier rules that forbid hard-coded assumptions about blockDim/warp layout unless explicitly declared. Keep your verifier semantics architecture-aware (or restrict to a portable subset); if your policy ISA is PTX-level, pin the PTX version / codegen assumptions and validate them against target GPUs at load time.
+  If policy code assumes a particular block/warp mapping (e.g., keys use `threadIdx.x` directly), you can end up with correctness or performance regressions when kernels run under different launch configs. Policies should not implicitly assume block/grid shapes unless gpu_ext can guarantee them. If a policy depends on warp- or block-level structure, require declaring it (metadata) and validate at attach time. Add verifier rules that forbid hard-coded assumptions about blockDim/warp layout unless explicitly declared. Keep your verifier semantics architecture-aware (or restrict to a portable subset); if your policy ISA is PTX-level, pin the PTX version / codegen assumptions and validate them against target GPUs at load time.
 
 ---
 
 ### 17) Atomic Contention & Atomic-Scope Pitfalls — CPU-shared, GPU-amplified (perf → DoS), plus GPU-specific scope details
 
 * **What it is / why it matters.**
-  Heavy atomic contention is a classic "performance bug that behaves like a DoS" under massive parallelism. There is an open-source benchmark suite accompanying a 2025 paper on atomic contention, explicitly measuring atomic performance under contention and across different **memory scopes** (block/device/system) and access patterns.([GitHub][13])
+  Heavy atomic contention is a classic "performance bug that behaves like a DoS" under massive parallelism.
+
+* **Seen in / checked by.**
+  * There is an open-source benchmark suite (GPUAtomicContention) accompanying a 2025 paper on atomic contention, explicitly measuring atomic performance under contention and across different **memory scopes** (block/device/system) and access patterns.([GitHub][13])
+
+* **Checking approach.**
+  * **Budget-based verification:** limit atomic frequency per warp/block.
+  * **Benchmarking:** use atomic contention benchmarks to calibrate safe budgets.
+
 * **How gpu_ext should use it.**
   Treat "atomic frequency + contention risk" as a verifier-enforced budget: e.g., allow at most one global atomic per warp, or require warp-aggregated updates. If policies use scoped atomics, require the scope to be explicit and conservative. For evaluation, you can reuse the open benchmark suite to calibrate "safe budgets" per GPU generation.
 
@@ -369,6 +484,14 @@ __syncthreads();
 while (flag == 0) { }         // may spin if compiler hoists load / visibility issues
 ```
 
+* **Seen in / checked by.**
+  * GKLEE explicitly lists "forgot volatile" as a discovered bug type.([Lingming Zhang][18])
+  * Simulee and other tools' race detection can surface some of these issues when they manifest as data races.([zhangyuqun.github.io][19])
+
+* **Checking approach.**
+  * **Symbolic exploration (GKLEE-style):** explore memory access orderings and detect stale read scenarios.([Lingming Zhang][18])
+  * **Pattern-based linting:** flag spin-wait loops on shared memory without volatile or fence.
+
 * **How gpu_ext should use it.**
   Avoid exposing raw shared/global memory communication to policies; instead provide **helpers with explicit semantics** (e.g., "atomic increment" or "write once" patterns), and verify policies don't implement ad-hoc synchronization loops. Forbid spin-waiting on shared memory in policy code.
 
@@ -384,6 +507,14 @@ while (flag == 0) { }         // may spin if compiler hoists load / visibility i
 ```cuda
 // Tenant A kernel writes OOB and corrupts Tenant B memory in same context.
 ```
+
+* **Seen in / checked by.**
+  * Guardian explicitly addresses multi-tenant fault isolation via PTX-level bounds fencing.([arXiv][22])
+  * cuCatch discusses memory protection mechanisms for GPU sharing scenarios.([d1qx31qr3h6wln.cloudfront.net][20])
+
+* **Checking approach.**
+  * **PTX-level instrumentation (Guardian-style):** insert bounds checks and interception to fence illegal accesses.([arXiv][22])
+  * **Tagging mechanisms (cuCatch-style):** track allocation ownership and validate access rights.([d1qx31qr3h6wln.cloudfront.net][20])
 
 * **How gpu_ext should use it.**
   This directly supports your "availability is correctness" story: if gpu_ext policies run in privileged/shared contexts, you must prevent policy code from generating OOB accesses. Either: (a) only allow map helpers (no raw memory), or (b) instrument policy memory ops with bounds checks (Guardian-style PTX rewriting).
@@ -402,47 +533,31 @@ while (flag == 0) { }         // may spin if compiler hoists load / visibility i
 // Kernel B is "enemy" stressing cache/DRAM/SM resources => tail latency explosion
 ```
 
+* **Seen in / checked by.**
+  * "Making Powerful Enemies on NVIDIA GPUs" studies interference channels and adversarial slowdowns in shared GPU execution.
+  * Guardian's threat model discusses interference isolation in multi-tenant GPU sharing.([arXiv][22])
+
+* **Checking approach.**
+  * **Resource-budget verification:** enforce bounded resource consumption per kernel/policy.
+  * **Interference benchmarking:** characterize worst-case slowdowns under contention (as in "Powerful Enemies" methodology).
+
 * **How gpu_ext should use it.**
   Add a verifier contract like: "policy executes in O(1) helper calls, O(1) global memory ops, no blocking, warp-uniform side effects." Then you can argue (a) no hangs, and (b) bounded added contention footprint—consistent with your multi-tenant threat model.
 
 ---
 
-## 2. 你问的"哪些 CPU 也有 vs GPU 独特/更严重"：一句话结论
+### Summary: Improper Synchronization as a Root-Cause Category (Wu et al.'s Three-Way Taxonomy)
 
-* **CPU 也有（但 GPU 上更严重/更难 debug）**
-  data races、deadlocks、OOB/invalid pointer、uninitialized reads、memory leaks、arithmetic overflow/div0、non-termination。ESBMC-GPU/Compute Sanitizer/（部分）GPUVerify/GKLEE 都覆盖这些方向。([GitHub][10])
+Wu et al.'s empirical study explicitly groups CUDA-specific synchronization issues into three concrete bug types: **data race**, **barrier divergence**, and **redundant barrier functions**. They also highlight that these often manifest as inferior performance and flaky tests. Simulee is used to find these categories in real projects.([arXiv][21])
 
-* **GPU/SIMT 独特语义（paper reviewer 最吃的“为什么需要 GPU-specific verification”）**
-  barrier divergence、warp-sync mask/warp divergence around barriers、memory coalescing/uncoalesced、shared-memory bank conflicts、block-size dependence、scoped synchronization（scope 不足导致 scoped races）、independent thread scheduling/cooperative groups 引入的新 sync/race hazard。([Nathan Chong][1])
-
-* **GPU 上“性能问题≈正确性问题（bounded interference）”最有说服力的几类**
-  uncoalesced/non-coalesceable、warp divergence、atomic contention、(redundant) barriers —— 因为这些会被 SIMT/海量线程数放大成几十倍甚至 DoS 级尾延迟（这正是你 gpu_ext 想强调的 contract）。对应工具/论文链条在 GPUDrano/GPUCheck/GKLEE + 2025 atomic contention benchmark + AuCS/Wu（redundant barrier）里比较齐。([GitHub][2])
-
----
-
-## 3. 开源项目补全清单（之前最容易漏、但对 gpu_ext 很好用）
-
-这些是我这次扫开源补上的（你可以作为 artifact/related-work 的“tooling landscape”段落）：
-
-* **GPUVerify (OSS)**: static verification for race- and divergence-freedom of CUDA/OpenCL kernels.([GitHub][14])
-* **GKLEE (has OSS forks)**: symbolic/concolic-style exploration; reports OOB, deadlock, plus performance defects like coalescing/bank conflicts/warp divergence.([Peng Li's Homepage][12])
-* **GPUDrano (OSS)**: static analysis for uncoalesced accesses + block-size independence.([GitHub][2])
-* **ESBMC-GPU (OSS)**: model checking for data race, deadlock, pointer safety, array bounds, overflow, div0, assertions.([GitHub][10])
-* **CuSan (OSS)**: detects data races between async CUDA calls and host via Clang/LLVM + ThreadSanitizer.([GitHub][5])
-* **CUDA-Data-Race-Detector (OSS)**: dynamic device-side data race detector (NVBit-based).([GitHub][15])
-* **Oclgrind (OSS, OpenCL)**: simulator/debugger that detects memory access errors, data races, barrier divergence; useful做“GPU bug 类型示例 + 教学 artifact”。([GitHub][16])
-* **GPUAtomicContention (OSS benchmarks)**: atomic contention & scopes microbench suite (PLOS’25).([GitHub][13])
-* **GPURepair (OSS)**: automated repair focusing on races/barrier divergence (uses GPUVerify).([GitHub][17])
+This is exactly the "verification story" hook for gpu_ext: your verifier can claim that policy code cannot introduce these synchronization root causes because:
+* no barriers allowed,
+* warp-uniform side effects enforced,
+* bounded helper calls,
+* and a restricted memory model for policies.
 
 ---
 
-如果你下一步要把这些变成 **paper 的 verification story**，最强的结构通常是：
-
-1. 先用 AuCS/Wu 的三大类（race/divergence/redundant barrier）建立“GPU sync bugs 的经典主干”，再把 Compute Sanitizer 的 synccheck/racecheck 当成“工业界 corroboration”；([Shinhwei][6])
-2. 再用 ScoRD/iGUARD 把“新 CUDA 特性（scope、ITS、CG）→ 新 bug”讲清楚，强调 CPU eBPF verifier 完全没建模这些；([CSA - IISc Bangalore][4])
-3. 最后用 GPUDrano/GPUCheck/GKLEE + atomic contention benchmarks 把“性能 = bounded interference correctness”落地成可引用的分析/检测证据链。([GitHub][2])
-
-如果你愿意，我也可以把上面 17 条再进一步压缩成你 paper 里的一张 **“GPU-specific failure modes ↔ verifier rule mapping”**（每条一行、可直接贴进设计章节），并且把“CPU-shared vs GPU-specific”用更审稿友好的措辞（threat model/contract）写成 2–3 段英文。
 
 [1]: https://nchong.github.io/papers/oopsla12.pdf "https://nchong.github.io/papers/oopsla12.pdf"
 [2]: https://github.com/upenn-acg/gpudrano-static-analysis_v1.0 "https://github.com/upenn-acg/gpudrano-static-analysis_v1.0"
@@ -466,3 +581,4 @@ while (flag == 0) { }         // may spin if compiler hoists load / visibility i
 [20]: https://d1qx31qr3h6wln.cloudfront.net/publications/PLDI_2023_cuCatch_2.pdf "https://d1qx31qr3h6wln.cloudfront.net/publications/PLDI_2023_cuCatch_2.pdf"
 [21]: https://arxiv.org/pdf/1905.01833 "https://arxiv.org/pdf/1905.01833"
 [22]: https://arxiv.org/pdf/2401.09290 "https://arxiv.org/pdf/2401.09290"
+[23]: https://www.cis.upenn.edu/~alur/Cav17.pdf "https://www.cis.upenn.edu/~alur/Cav17.pdf"
